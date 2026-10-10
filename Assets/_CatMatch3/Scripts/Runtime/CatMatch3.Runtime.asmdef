@@ -1,0 +1,5 @@
+{
+    "name": "CatMatch3.Runtime",
+    "rootNamespace": "CatMatch3.Runtime",
+    "references": ["CatMatch3.Core", "UnityEngine.UI"]
+}

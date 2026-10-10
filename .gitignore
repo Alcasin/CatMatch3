@@ -1,0 +1,43 @@
+# Unity-generated data and local builds
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Ll]ogs/
+/[Bb]uild/
+/[Bb]uilds/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# IDE and generated solution/project files
+/.vs/
+/.idea/
+/.vscode/
+/*.csproj
+/*.sln
+/*.slnx
+/*.suo
+/*.user
+/*.userprefs
+/*.pidb
+/*.booproj
+/*.unityproj
+/*.opendb
+/*.VC.db
+/ExportedObj/
+/ConsuloProject/
+
+# Unity temporary files and crash diagnostics
+*.tmp
+*.temp
+*.pid
+*.bak
+sysinfo.txt
+crashlytics-build.properties
+
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Assets and their .meta files are intentionally tracked.

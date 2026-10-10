@@ -1,0 +1,6 @@
+{
+    "name": "CatMatch3.Core",
+    "rootNamespace": "CatMatch3.Core",
+    "references": [],
+    "noEngineReferences": true
+}
