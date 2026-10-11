@@ -13,14 +13,14 @@ namespace CatMatch3.Core
             if (!board.IsFull) throw new InvalidOperationException("Reshuffling requires a full board.");
             if (maxAttempts < 1) throw new ArgumentOutOfRangeException(nameof(maxAttempts));
             var before = board.Capture();
-            var original = new CatType[Board.Width * Board.Height];
+            var original = new Tile[Board.Width * Board.Height];
             var counts = new int[5];
             for (int x = 0; x < Board.Width; x++)
                 for (int y = 0; y < Board.Height; y++)
                 {
-                    var type = board.GetCell(new BoardPosition(x, y));
-                    original[x * Board.Height + y] = type;
-                    counts[(int)type]++;
+                    var tile = board.GetTile(new BoardPosition(x, y));
+                    original[x * Board.Height + y] = tile;
+                    counts[(int)tile.Type]++;
                 }
             // Each seven-cell row can contain at most five of one type without a triple.
             foreach (int count in counts)
@@ -29,13 +29,13 @@ namespace CatMatch3.Core
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                var shuffled = (CatType[])original.Clone();
+                var shuffled = (Tile[])original.Clone();
                 for (int i = shuffled.Length - 1; i > 0; i--)
                 {
                     int j = RandomSource.Draw(random, i + 1);
                     var type = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = type;
                 }
-                var layout = new CatType[Board.Width, Board.Height];
+                var layout = new Tile[Board.Width, Board.Height];
                 for (int x = 0; x < Board.Width; x++)
                     for (int y = 0; y < Board.Height; y++) layout[x, y] = shuffled[x * Board.Height + y];
                 var candidate = new Board(layout);

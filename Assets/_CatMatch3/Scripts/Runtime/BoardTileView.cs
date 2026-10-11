@@ -15,6 +15,7 @@ namespace CatMatch3.Runtime
         private Image face;
         private Text label;
         private CanvasGroup visibility;
+        private Image stripe;
 
         public RectTransform Rect => (RectTransform)transform;
 
@@ -26,10 +27,21 @@ namespace CatMatch3.Runtime
             face = body;
             label = text;
             visibility = gameObject.AddComponent<CanvasGroup>();
+            var stripeObject = new GameObject("Stripe", typeof(RectTransform), typeof(Image));
+            stripeObject.transform.SetParent(face.transform, false);
+            stripe = stripeObject.GetComponent<Image>();
+            stripe.raycastTarget = false;
+            stripe.enabled = false;
         }
 
         public void Show(CatType type)
         {
+            Show(new Tile(type));
+        }
+
+        public void Show(Tile tile)
+        {
+            var type = tile.Type;
             SetVisibility(1f, 1f);
             Color[] colors =
             {
@@ -40,6 +52,14 @@ namespace CatMatch3.Runtime
             face.color = colors[(int)type];
             label.color = type == CatType.Black ? Color.white : new Color(0.10f, 0.12f, 0.17f);
             label.text = type.ToString().ToUpperInvariant() + "\n" + position;
+            stripe.enabled = tile.IsSpecial;
+            stripe.color = type == CatType.Black ? Color.white : new Color(0.12f, 0.10f, 0.20f);
+            var stripeRect = stripe.rectTransform;
+            bool horizontal = tile.Stripe == StripeOrientation.Horizontal;
+            stripeRect.anchorMin = horizontal ? new Vector2(0f, 0.15f) : new Vector2(0.85f, 0f);
+            stripeRect.anchorMax = horizontal ? new Vector2(1f, 0.15f) : new Vector2(0.85f, 1f);
+            stripeRect.anchoredPosition = Vector2.zero;
+            stripeRect.sizeDelta = horizontal ? new Vector2(-12f, 10f) : new Vector2(10f, -12f);
             SetEmphasis(false, false);
         }
 

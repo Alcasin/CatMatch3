@@ -16,6 +16,8 @@ namespace CatMatch3.Runtime
         private Board board;
         public const uint ResetSeed = 1337;
         private IRandomSource random;
+        private ObjectiveTracker objectives;
+        private M3QaScenario initialScenario = M3QaScenario.Original;
         private BoardPosition? selected;
         private bool pointerHeld;
         private int pointerId;
@@ -32,7 +34,7 @@ namespace CatMatch3.Runtime
             if (view == null)
             {
                 State = BoardInteractionState.Error;
-                Debug.LogError("CatMatch3: BoardView reference is missing. Rerun Apply M2 Resolution.", this);
+                Debug.LogError("CatMatch3: BoardView reference is missing. Rerun Apply M3 Specials & Objectives.", this);
                 enabled = false;
                 return;
             }
@@ -45,11 +47,13 @@ namespace CatMatch3.Runtime
             StopAllCoroutines();
             pointerHeld = false;
             selected = null;
-            board = PrototypeLayout.CreateBoard();
+            board = M3PrototypeLayout.CreateBoard(initialScenario);
+            objectives = M3PrototypeLayout.CreateObjectives();
             random = new SeededRandom(ResetSeed);
             LastWaveCount = 0;
             State = BoardInteractionState.Ready;
             view.ShowBoard(board);
+            view.ShowObjectives(objectives.Capture());
             ReadyStatus("Choose a tile");
         }
 
@@ -156,11 +160,13 @@ namespace CatMatch3.Runtime
 
             view.ShowBoard(board);
             State = BoardInteractionState.Resolving;
-            yield return PresentResolution(BoardResolver.Resolve(board, random));
+            yield return PresentResolution(BoardResolver.Resolve(board, random,
+                objectives: objectives, swapDestination: second));
         }
 
         private IEnumerator PresentResolution(ResolutionResult result)
         {
+            view.ShowObjectives(result.InitialObjectives);
             for (int i = 0; i < result.Waves.Count; i++)
             {
                 var wave = result.Waves[i];
@@ -169,8 +175,16 @@ namespace CatMatch3.Runtime
                 view.ShowSnapshot(wave.Before);
                 view.Highlight(wave.Matches);
                 yield return new WaitForSecondsRealtime(0.12f);
-                yield return view.AnimateClear(wave.Matches);
+                foreach (var activation in wave.Activations)
+                {
+                    view.SetStatus($"RESOLVING  -  Wave {i + 1}/{result.WaveCount}\n" +
+                        $"{(activation.IsChained ? "CHAIN" : "STRIPE")}  -  {activation.Tile.Stripe} at {activation.Position}");
+                    yield return view.AnimateActivation(activation);
+                }
+                yield return view.AnimateClear(wave.Removals);
                 view.ShowSnapshot(wave.AfterClear);
+                view.ShowObjectives(wave.ObjectivesAfter);
+                yield return view.AnimateCreation(wave.Creations);
                 yield return view.AnimateGravity(wave.Movements);
                 view.ShowSnapshot(wave.AfterGravity);
                 yield return view.AnimateRefill(wave.Spawns);
@@ -183,6 +197,7 @@ namespace CatMatch3.Runtime
                 if (result.Reshuffle.Success) yield return view.AnimateReshuffle(result.Reshuffle);
             }
             view.ShowSnapshot(result.Final);
+            view.ShowObjectives(result.FinalObjectives);
             if (!result.Success)
             {
                 EnterError(result.Error);
@@ -203,8 +218,9 @@ namespace CatMatch3.Runtime
             State = BoardInteractionState.Error;
             pointerHeld = false;
             selected = null;
-            Debug.LogError("CatMatch3 M2: " + message + " Use Reset Board to recover.", this);
+            Debug.LogError("CatMatch3: " + message + " Use Reset Board to recover.", this);
             view.ShowSnapshot(board.Capture());
+            view.ShowObjectives(objectives.Capture());
             view.SetStatus("ERROR  -  " + message + "\nUse Reset Board to recover.");
         }
 
@@ -244,6 +260,7 @@ namespace CatMatch3.Runtime
         private void RunCascadeDemo()
         {
             if (!Application.isPlaying || board == null || State != BoardInteractionState.Ready) return;
+            initialScenario = M3QaScenario.Original;
             ResetBoard();
             random = new SeededRandom(141); // Three waves (initial match plus two cascades).
             RequestSwap(new BoardPosition(1, 0), new BoardPosition(1, 1));
@@ -253,6 +270,7 @@ namespace CatMatch3.Runtime
         private void RunReshuffleDemo()
         {
             if (!Application.isPlaying || board == null || State != BoardInteractionState.Ready) return;
+            initialScenario = M3QaScenario.Original;
             ResetBoard();
             board = PrototypeLayout.CreateDeadlockedBoard();
             view.ShowBoard(board);
@@ -264,7 +282,43 @@ namespace CatMatch3.Runtime
         {
             view.SetStatus("RESHUFFLING  -  Stable board with no legal moves");
             yield return new WaitForSecondsRealtime(0.6f);
-            yield return PresentResolution(BoardResolver.Resolve(board, random));
+            yield return PresentResolution(BoardResolver.Resolve(board, random, objectives: objectives));
+        }
+
+        [ContextMenu("M3 QA/1a - Horizontal creation")]
+        private void RunHorizontalCreation() { RunM3Demo(M3QaScenario.HorizontalCreation); }
+        [ContextMenu("M3 QA/1b - Vertical creation")]
+        private void RunVerticalCreation() { RunM3Demo(M3QaScenario.VerticalCreation); }
+        [ContextMenu("M3 QA/2a - Horizontal activation")]
+        private void RunHorizontalActivation() { RunM3Demo(M3QaScenario.HorizontalActivation); }
+        [ContextMenu("M3 QA/2b - Vertical activation")]
+        private void RunVerticalActivation() { RunM3Demo(M3QaScenario.VerticalActivation); }
+        [ContextMenu("M3 QA/3 - Chain activation")]
+        private void RunChainDemo() { RunM3Demo(M3QaScenario.Chain); }
+        [ContextMenu("M3 QA/4 - Objective progress")]
+        private void RunObjectivesDemo() { RunM3Demo(M3QaScenario.Objectives); }
+        [ContextMenu("M3 QA/Return to original board")]
+        private void ReturnToOriginal()
+        {
+            if (!Application.isPlaying || board == null || State != BoardInteractionState.Ready) return;
+            initialScenario = M3QaScenario.Original;
+            ResetBoard();
+        }
+
+        private void RunM3Demo(M3QaScenario scenario)
+        {
+            if (!Application.isPlaying || board == null || State != BoardInteractionState.Ready) return;
+            initialScenario = scenario;
+            ResetBoard();
+            State = BoardInteractionState.Swapping;
+            StartCoroutine(RunSafely(PlayM3Demo(scenario)));
+        }
+
+        private IEnumerator PlayM3Demo(M3QaScenario scenario)
+        {
+            view.SetStatus("M3 QA  -  " + scenario + "\nAutomatic swap in 0.6 seconds");
+            yield return new WaitForSecondsRealtime(0.6f);
+            yield return PlaySwap(new BoardPosition(1, 1), M3PrototypeLayout.SwapDestination(scenario));
         }
 #endif
     }

@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using CatMatch3.Core;
 using UnityEngine;
 using UnityEngine.UI;
@@ -19,6 +20,9 @@ namespace CatMatch3.Runtime
         private Vector2 lastSize;
         private float step;
         private CanvasGroup boardVisibility;
+        private readonly Image[,] pawMarks = new Image[Board.Width, Board.Height];
+        private Text objectiveStatus;
+        private Image stripeEffect;
 
         public float CellSize => step;
 
@@ -31,7 +35,7 @@ namespace CatMatch3.Runtime
             var title = CreateText("Title", transform, "CAT MATCH 3", 44);
             Place(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -64f), new Vector2(800f, 70f));
             var instructions = CreateText("Instructions", transform,
-                "Tap two neighbors, or drag onto a neighbor.\nGold = selected   |   Mint = matched", 25);
+                "Tap two neighbors, or drag onto a neighbor.\nGold = selected | Mint = matched | Cyan cell = paw", 25);
             Place(instructions.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -145f), new Vector2(820f, 90f));
             status = CreateText("Status", transform, "", 26);
             Place(status.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -225f), new Vector2(820f, 70f));
@@ -40,6 +44,16 @@ namespace CatMatch3.Runtime
             boardVisibility = boardRect.gameObject.AddComponent<CanvasGroup>();
             boardRect.gameObject.AddComponent<RectMask2D>();
             Place(boardRect, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
+            // Cell frames are behind all movable tile roots and never move during gravity or swaps.
+            for (int y = 0; y < Board.Height; y++)
+                for (int x = 0; x < Board.Width; x++)
+                {
+                    var marker = CreateRect("Paw cell " + new BoardPosition(x, y), boardRect).gameObject.AddComponent<Image>();
+                    marker.color = new Color(0.10f, 0.88f, 1f);
+                    marker.raycastTarget = false;
+                    marker.enabled = false;
+                    pawMarks[x, y] = marker;
+                }
             for (int y = 0; y < Board.Height; y++)
             {
                 for (int x = 0; x < Board.Width; x++)
@@ -62,6 +76,10 @@ namespace CatMatch3.Runtime
                 }
             }
 
+            stripeEffect = CreateRect("Stripe clear effect", boardRect).gameObject.AddComponent<Image>();
+            stripeEffect.raycastTarget = false;
+            stripeEffect.enabled = false;
+
             var resetRect = CreateRect("Reset Board", transform);
             Place(resetRect, new Vector2(0.5f, 0f), new Vector2(0f, 92f), new Vector2(420f, 96f));
             var resetImage = resetRect.gameObject.AddComponent<Image>();
@@ -73,9 +91,8 @@ namespace CatMatch3.Runtime
             var resetLabel = CreateText("Label", resetRect, "RESET BOARD", 30);
             resetLabel.color = new Color(0.07f, 0.14f, 0.17f);
             Stretch(resetLabel.rectTransform);
-            var note = CreateText("Resolution note", transform,
-                "M2: clear, fall, refill, cascades.\nReset restores the layout and random seed.", 23);
-            Place(note.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 200f), new Vector2(820f, 80f));
+            objectiveStatus = CreateText("Development objectives", transform, "", 23);
+            Place(objectiveStatus.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 200f), new Vector2(820f, 90f));
             Canvas.ForceUpdateCanvases();
             Relayout();
         }
@@ -98,8 +115,12 @@ namespace CatMatch3.Runtime
             step = side / Board.Width;
             for (int y = 0; y < Board.Height; y++)
                 for (int x = 0; x < Board.Width; x++)
+                {
+                    Place(pawMarks[x, y].rectTransform, new Vector2(0.5f, 0.5f),
+                        CellCenter(new BoardPosition(x, y)), Vector2.one * (step - 1f));
                     Place(tiles[x, y].Rect, new Vector2(0.5f, 0.5f),
                         CellCenter(new BoardPosition(x, y)), Vector2.one * (step - 6f));
+                }
         }
 
         public void ShowBoard(Board board)
@@ -111,13 +132,15 @@ namespace CatMatch3.Runtime
         {
             boardVisibility.alpha = 1f;
             boardRect.localScale = Vector3.one;
+            stripeEffect.enabled = false;
+            stripeEffect.rectTransform.localScale = Vector3.one;
             for (int y = 0; y < Board.Height; y++)
                 for (int x = 0; x < Board.Width; x++)
                 {
                     var position = new BoardPosition(x, y);
                     tiles[x, y].Rect.anchoredPosition = CellCenter(position);
-                    var type = snapshot.GetCell(position);
-                    if (type.HasValue) tiles[x, y].Show(type.Value);
+                    var tile = snapshot.GetTile(position);
+                    if (tile.HasValue) tiles[x, y].Show(tile.Value);
                     else tiles[x, y].SetVisibility(0f, 1f);
                 }
         }
@@ -136,6 +159,20 @@ namespace CatMatch3.Runtime
         }
 
         public void SetStatus(string message) { status.text = message; }
+
+        public void ShowObjectives(ObjectiveSnapshot progress)
+        {
+            for (int y = 0; y < Board.Height; y++)
+                for (int x = 0; x < Board.Width; x++) pawMarks[x, y].enabled = false;
+            if (progress == null) { objectiveStatus.text = ""; return; }
+            foreach (var cell in progress.RemainingMarks) pawMarks[cell.X, cell.Y].enabled = true;
+            var text = new StringBuilder("DEV OBJECTIVES  |  ");
+            foreach (var collection in progress.Collections)
+                text.Append($"{collection.Type}: {collection.Collected}/{collection.Target}  ");
+            text.Append($"\nPaws: {progress.ClearedPaws}/{progress.TotalPaws}");
+            if (progress.IsComplete) text.Append("  |  Fulfilled - keep playing");
+            objectiveStatus.text = text.ToString();
+        }
 
         public bool TryLocalPoint(Vector2 screenPoint, out Vector2 local)
         {
@@ -174,16 +211,61 @@ namespace CatMatch3.Runtime
             b.anchoredPosition = toB;
         }
 
-        public IEnumerator AnimateClear(MatchResult matches)
+        public IEnumerator AnimateClear(IReadOnlyList<TileRemoval> removals)
         {
             float elapsed = 0f;
             while (elapsed < 0.22f)
             {
                 elapsed += Time.unscaledDeltaTime;
                 float fraction = Mathf.Clamp01(elapsed / 0.22f);
-                foreach (var position in matches.Cells)
-                    tiles[position.X, position.Y].SetVisibility(1f - fraction, 1f - 0.7f * fraction);
+                foreach (var removal in removals)
+                    tiles[removal.Position.X, removal.Position.Y].SetVisibility(1f - fraction, 1f - 0.7f * fraction);
                 yield return null;
+            }
+        }
+
+        public IEnumerator AnimateActivation(SpecialActivation activation)
+        {
+            foreach (var cell in activation.Cells) tiles[cell.X, cell.Y].SetEmphasis(false, true);
+            bool horizontal = activation.Tile.Stripe == StripeOrientation.Horizontal;
+            var center = CellCenter(activation.Position);
+            Place(stripeEffect.rectTransform, new Vector2(0.5f, 0.5f),
+                horizontal ? new Vector2(0f, center.y) : new Vector2(center.x, 0f),
+                horizontal ? new Vector2(boardRect.rect.width, step * 0.36f) : new Vector2(step * 0.36f, boardRect.rect.height));
+            stripeEffect.enabled = true;
+            float elapsed = 0f;
+            while (elapsed < 0.22f)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float fraction = Mathf.Clamp01(elapsed / 0.22f);
+                stripeEffect.color = new Color(0.24f, 1f, 0.68f, 0.65f * (1f - fraction));
+                stripeEffect.rectTransform.localScale = horizontal
+                    ? new Vector3(fraction, 1f, 1f) : new Vector3(1f, fraction, 1f);
+                yield return null;
+            }
+            stripeEffect.enabled = false;
+        }
+
+        public IEnumerator AnimateCreation(IReadOnlyList<SpecialCreation> creations)
+        {
+            if (creations.Count == 0) yield break;
+            float elapsed = 0f;
+            while (elapsed < 0.30f)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float scale = 1f + 0.2f * Mathf.Sin(Mathf.Clamp01(elapsed / 0.30f) * Mathf.PI);
+                foreach (var creation in creations)
+                {
+                    var tile = tiles[creation.Position.X, creation.Position.Y];
+                    tile.SetEmphasis(true, false);
+                    tile.SetVisibility(1f, scale);
+                }
+                yield return null;
+            }
+            foreach (var creation in creations)
+            {
+                tiles[creation.Position.X, creation.Position.Y].SetVisibility(1f, 1f);
+                tiles[creation.Position.X, creation.Position.Y].SetEmphasis(false, false);
             }
         }
 
@@ -204,7 +286,7 @@ namespace CatMatch3.Runtime
 
         public IEnumerator AnimateRefill(IReadOnlyList<TileSpawn> spawns)
         {
-            foreach (var spawn in spawns) tiles[spawn.Position.X, spawn.Position.Y].Show(spawn.Type);
+            foreach (var spawn in spawns) tiles[spawn.Position.X, spawn.Position.Y].Show(spawn.Tile);
             float elapsed = 0f;
             while (elapsed < 0.38f)
             {

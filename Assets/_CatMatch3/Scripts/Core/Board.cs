@@ -8,18 +8,17 @@ namespace CatMatch3.Core
     {
         public const int Width = 7;
         public const int Height = 7;
-        private readonly CatType[,] cells;
+        private readonly Tile[,] cells;
         private readonly bool[,] occupied = new bool[Width, Height];
 
-        public Board(CatType[,] layout)
+        public Board(CatType[,] layout) : this(ToTiles(layout)) { }
+
+        public Board(Tile[,] layout)
         {
             if (layout == null) throw new ArgumentNullException(nameof(layout));
             if (layout.GetLength(0) != Width || layout.GetLength(1) != Height)
                 throw new ArgumentException("A board layout must be exactly 7 columns by 7 rows.", nameof(layout));
-            foreach (var type in layout)
-                if (!Enum.IsDefined(typeof(CatType), type))
-                    throw new ArgumentException("Layout contains an unknown cat type.", nameof(layout));
-            cells = (CatType[,])layout.Clone();
+            cells = (Tile[,])layout.Clone();
             for (int x = 0; x < Width; x++)
                 for (int y = 0; y < Height; y++) occupied[x, y] = true;
         }
@@ -31,6 +30,11 @@ namespace CatMatch3.Core
 
         public CatType GetCell(BoardPosition position)
         {
+            return GetTile(position).Type;
+        }
+
+        public Tile GetTile(BoardPosition position)
+        {
             if (!IsValidPosition(position)) throw new ArgumentOutOfRangeException(nameof(position));
             if (!occupied[position.X, position.Y]) throw new InvalidOperationException("The cell is empty.");
             return cells[position.X, position.Y];
@@ -40,7 +44,15 @@ namespace CatMatch3.Core
         {
             type = default;
             if (!IsValidPosition(position) || !occupied[position.X, position.Y]) return false;
-            type = cells[position.X, position.Y];
+            type = cells[position.X, position.Y].Type;
+            return true;
+        }
+
+        public bool TryGetTile(BoardPosition position, out Tile tile)
+        {
+            tile = default;
+            if (!IsValidPosition(position) || !occupied[position.X, position.Y]) return false;
+            tile = cells[position.X, position.Y];
             return true;
         }
 
@@ -52,12 +64,22 @@ namespace CatMatch3.Core
         public CatType[,] CopyCells()
         {
             if (!IsFull) throw new InvalidOperationException("Use Capture for a board with empty cells.");
-            return (CatType[,])cells.Clone();
+            var copy = new CatType[Width, Height];
+            for (int x = 0; x < Width; x++)
+                for (int y = 0; y < Height; y++) copy[x, y] = cells[x, y].Type;
+            return copy;
+        }
+
+        /// <summary>Use this full-identity copy when constructing another board containing specials.</summary>
+        public Tile[,] CopyTiles()
+        {
+            if (!IsFull) throw new InvalidOperationException("Use Capture for a board with empty cells.");
+            return (Tile[,])cells.Clone();
         }
 
         public BoardSnapshot Capture()
         {
-            var snapshot = new CatType?[Width, Height];
+            var snapshot = new Tile?[Width, Height];
             for (int x = 0; x < Width; x++)
                 for (int y = 0; y < Height; y++)
                     if (occupied[x, y]) snapshot[x, y] = cells[x, y];
@@ -124,7 +146,7 @@ namespace CatMatch3.Core
             }
             foreach (var spawn in spawns)
             {
-                cells[spawn.Position.X, spawn.Position.Y] = spawn.Type;
+                cells[spawn.Position.X, spawn.Position.Y] = spawn.Tile;
                 occupied[spawn.Position.X, spawn.Position.Y] = true;
             }
             return spawns.AsReadOnly();
@@ -159,6 +181,29 @@ namespace CatMatch3.Core
         {
             Array.Copy(replacement.cells, cells, cells.Length);
             Array.Copy(replacement.occupied, occupied, occupied.Length);
+        }
+
+        internal void SetTile(BoardPosition position, Tile tile)
+        {
+            if (!IsValidPosition(position)) throw new ArgumentOutOfRangeException(nameof(position));
+            if (!occupied[position.X, position.Y]) throw new InvalidOperationException("Cannot replace an empty cell.");
+            cells[position.X, position.Y] = tile;
+        }
+
+        private static Tile[,] ToTiles(CatType[,] layout)
+        {
+            if (layout == null) throw new ArgumentNullException(nameof(layout));
+            if (layout.GetLength(0) != Width || layout.GetLength(1) != Height)
+                throw new ArgumentException("A board layout must be exactly 7 columns by 7 rows.", nameof(layout));
+            var tiles = new Tile[Width, Height];
+            for (int x = 0; x < Width; x++)
+                for (int y = 0; y < Height; y++)
+                {
+                    if (!Enum.IsDefined(typeof(CatType), layout[x, y]))
+                        throw new ArgumentException("Layout contains an unknown cat type.", nameof(layout));
+                    tiles[x, y] = new Tile(layout[x, y]);
+                }
+            return tiles;
         }
 
         public SwapResult TrySwap(BoardPosition first, BoardPosition second)
