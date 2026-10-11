@@ -25,6 +25,18 @@ namespace CatMatch3.Editor
         public static void Apply()
         {
             if (!CanApply()) return;
+            try { ApplyOrThrow(); }
+            catch (Exception exception)
+            {
+                Debug.LogError("CatMatch3 M1 setup did not finish: " + exception.Message);
+                Debug.LogException(exception);
+            }
+        }
+
+        // M4 must stop if infrastructure validation fails, rather than continuing after a logged error.
+        internal static void ApplyOrThrow()
+        {
+            if (!CanApply()) throw new InvalidOperationException("Exit Play Mode and wait for compilation before setup.");
             var previousActive = SceneManager.GetActiveScene();
             Scene scene = default;
             bool openedHere = false;
@@ -135,11 +147,10 @@ namespace CatMatch3.Editor
                     "The board UI and resolution presentation are generated at runtime. " +
                     "The M0 camera, build list, input asset and portrait settings were preserved.");
             }
-            catch (Exception exception)
+            catch
             {
                 if (undoGroup >= 0) Undo.RevertAllDownToGroup(undoGroup);
-                Debug.LogError("CatMatch3 M1 setup did not finish: " + exception.Message);
-                Debug.LogException(exception);
+                throw;
             }
             finally
             {

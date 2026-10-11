@@ -310,8 +310,8 @@ namespace CatMatch3.Tests.EditMode
             var a = PrototypeLayout.CreateDeadlockedBoard();
             var b = PrototypeLayout.CreateDeadlockedBoard();
             var before = a.CopyCells();
-            var first = BoardResolver.Resolve(a, new SeededRandom(1337));
-            var second = BoardResolver.Resolve(b, new SeededRandom(1337));
+            var first = BoardResolver.Resolve(a, new SeededRandom(1337), reshufflePolicy: ReshufflePolicy.Automatic);
+            var second = BoardResolver.Resolve(b, new SeededRandom(1337), reshufflePolicy: ReshufflePolicy.Automatic);
             Assert.That(first.Success, Is.True, first.Error);
             Assert.That(second.Success, Is.True, second.Error);
             Assert.That(first.Waves, Is.Empty);
@@ -339,7 +339,8 @@ namespace CatMatch3.Tests.EditMode
 
             var dead = PrototypeLayout.CreateDeadlockedBoard();
             before = dead.CopyCells();
-            var failed = BoardResolver.Resolve(dead, new IdentityShuffleRandom(), maxShuffleAttempts: 4);
+            var failed = BoardResolver.Resolve(dead, new IdentityShuffleRandom(), maxShuffleAttempts: 4,
+                reshufflePolicy: ReshufflePolicy.Automatic);
             Assert.That(failed.Success, Is.False);
             Assert.That(failed.Reshuffle.Attempts, Is.EqualTo(4));
             Assert.That(failed.Error, Does.Contain("4 attempts"));

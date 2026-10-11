@@ -374,7 +374,8 @@ namespace CatMatch3.Tests.EditMode
             var dead = new Board(deadTiles);
             Assert.That(dead.HasLegalMove(), Is.False);
             Assert.That(dead.CopyTiles(), Is.EqualTo(deadTiles));
-            var automatic = BoardResolver.Resolve(dead, new SeededRandom(1337), objectives: objectives);
+            var automatic = BoardResolver.Resolve(dead, new SeededRandom(1337), objectives: objectives,
+                reshufflePolicy: ReshufflePolicy.Automatic);
             Assert.That(automatic.Success, Is.True, automatic.Error);
             Assert.That(automatic.Reshuffle, Is.Not.Null);
             Assert.That(dead.CopyTiles().Cast<Tile>(), Is.EquivalentTo(deadTiles.Cast<Tile>()));

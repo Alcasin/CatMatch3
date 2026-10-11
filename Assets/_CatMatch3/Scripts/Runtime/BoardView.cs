@@ -23,6 +23,13 @@ namespace CatMatch3.Runtime
         private readonly Image[,] pawMarks = new Image[Board.Width, Board.Height];
         private Text objectiveStatus;
         private Image stripeEffect;
+        private Text levelTitle;
+        private Text moves;
+        private Text tutorial;
+        private GameObject resultPanel;
+        private Text resultTitle;
+        private Text resultButtonLabel;
+        private Rect lastSafeArea;
 
         public float CellSize => step;
 
@@ -30,20 +37,24 @@ namespace CatMatch3.Runtime
         {
             if (boardRect != null) return;
             owner = controller;
-            canvasRect = (RectTransform)transform;
+            canvasRect = CreateRect("Safe area", transform);
+            ApplySafeArea();
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            var title = CreateText("Title", transform, "CAT MATCH 3", 44);
-            Place(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -64f), new Vector2(800f, 70f));
-            var instructions = CreateText("Instructions", transform,
-                "Tap two neighbors, or drag onto a neighbor.\nGold = selected | Mint = matched | Cyan cell = paw", 25);
-            Place(instructions.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -145f), new Vector2(820f, 90f));
-            status = CreateText("Status", transform, "", 26);
-            Place(status.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -225f), new Vector2(820f, 70f));
+            levelTitle = CreateText("Level", canvasRect, "", 42);
+            Place(levelTitle.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -65f), new Vector2(820f, 100f));
+            moves = CreateText("Moves", canvasRect, "", 48);
+            Place(moves.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -155f), new Vector2(820f, 70f));
+            objectiveStatus = CreateText("Objectives", canvasRect, "", 40);
+            Place(objectiveStatus.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -245f), new Vector2(820f, 100f));
+            tutorial = CreateText("Tutorial", canvasRect, "", 32);
+            Place(tutorial.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -330f), new Vector2(820f, 60f));
+            status = CreateText("Status", canvasRect, "", 28);
+            Place(status.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 175f), new Vector2(820f, 70f));
 
-            boardRect = CreateRect("Board", transform);
+            boardRect = CreateRect("Board", canvasRect);
             boardVisibility = boardRect.gameObject.AddComponent<CanvasGroup>();
             boardRect.gameObject.AddComponent<RectMask2D>();
-            Place(boardRect, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
+            Place(boardRect, new Vector2(0.5f, 0.5f), new Vector2(0f, -80f), Vector2.one);
             // Cell frames are behind all movable tile roots and never move during gravity or swaps.
             for (int y = 0; y < Board.Height; y++)
                 for (int x = 0; x < Board.Width; x++)
@@ -80,28 +91,29 @@ namespace CatMatch3.Runtime
             stripeEffect.raycastTarget = false;
             stripeEffect.enabled = false;
 
-            var resetRect = CreateRect("Reset Board", transform);
-            Place(resetRect, new Vector2(0.5f, 0f), new Vector2(0f, 92f), new Vector2(420f, 96f));
+            var resetRect = CreateRect("Restart current level", canvasRect);
+            Place(resetRect, new Vector2(0.5f, 0f), new Vector2(0f, 72f), new Vector2(420f, 96f));
             var resetImage = resetRect.gameObject.AddComponent<Image>();
             resetImage.color = new Color(0.25f, 0.78f, 0.64f);
             var reset = resetRect.gameObject.AddComponent<Button>();
             reset.targetGraphic = resetImage;
             reset.navigation = new Navigation { mode = Navigation.Mode.None };
             reset.onClick.AddListener(owner.ResetBoard);
-            var resetLabel = CreateText("Label", resetRect, "RESET BOARD", 30);
+            var resetLabel = CreateText("Label", resetRect, "RESTART", 38);
             resetLabel.color = new Color(0.07f, 0.14f, 0.17f);
             Stretch(resetLabel.rectTransform);
-            objectiveStatus = CreateText("Development objectives", transform, "", 23);
-            Place(objectiveStatus.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 200f), new Vector2(820f, 90f));
+            BuildResultPanel();
             Canvas.ForceUpdateCanvases();
             Relayout();
         }
 
         private void LateUpdate()
         {
-            if (boardRect != null && canvasRect.rect.size != lastSize)
+            if (boardRect != null && (canvasRect.rect.size != lastSize || Screen.safeArea != lastSafeArea))
             {
                 // A resize cancels a gesture/animation instead of changing its coordinate basis mid-swap.
+                ApplySafeArea();
+                Canvas.ForceUpdateCanvases();
                 Relayout();
                 owner.ResetBoard();
             }
@@ -110,7 +122,7 @@ namespace CatMatch3.Runtime
         private void Relayout()
         {
             lastSize = canvasRect.rect.size;
-            float side = Mathf.Max(7f, Mathf.Min(lastSize.x - 64f, lastSize.y - 540f));
+            float side = Mathf.Max(7f, Mathf.Min(lastSize.x - 64f, lastSize.y - 600f));
             boardRect.sizeDelta = new Vector2(side, side);
             step = side / Board.Width;
             for (int y = 0; y < Board.Height; y++)
@@ -166,12 +178,59 @@ namespace CatMatch3.Runtime
                 for (int x = 0; x < Board.Width; x++) pawMarks[x, y].enabled = false;
             if (progress == null) { objectiveStatus.text = ""; return; }
             foreach (var cell in progress.RemainingMarks) pawMarks[cell.X, cell.Y].enabled = true;
-            var text = new StringBuilder("DEV OBJECTIVES  |  ");
+            var text = new StringBuilder();
+            bool combinedObjectives = progress.TotalPaws > 0 && progress.Collections.Count > 0;
             foreach (var collection in progress.Collections)
-                text.Append($"{collection.Type}: {collection.Collected}/{collection.Target}  ");
-            text.Append($"\nPaws: {progress.ClearedPaws}/{progress.TotalPaws}");
-            if (progress.IsComplete) text.Append("  |  Fulfilled - keep playing");
-            objectiveStatus.text = text.ToString();
+                text.Append($"{collection.Type}: {Mathf.Min(collection.Collected, collection.Target)} / {collection.Target}" +
+                    (combinedObjectives ? "   " : "\n"));
+            if (combinedObjectives) text.AppendLine();
+            if (progress.TotalPaws > 0) text.Append($"Paws: {progress.ClearedPaws} / {progress.TotalPaws}  (cyan cells)");
+            objectiveStatus.text = text.ToString().TrimEnd();
+        }
+
+        public void ShowLevel(string title, int? remainingMoves, bool showTutorial)
+        {
+            levelTitle.text = title;
+            moves.text = remainingMoves.HasValue ? "Moves: " + remainingMoves.Value : "DIAGNOSTIC — unlimited moves";
+            tutorial.text = showTutorial ? "Swap adjacent cats to match 3!" : "";
+        }
+
+        public void HideResult() { resultPanel.SetActive(false); }
+        public void ShowResult(string title, string action)
+        {
+            resultTitle.text = title;
+            resultButtonLabel.text = action;
+            resultPanel.SetActive(true);
+        }
+
+        private void ApplySafeArea()
+        {
+            lastSafeArea = Screen.safeArea;
+            canvasRect.anchorMin = new Vector2(lastSafeArea.xMin / Mathf.Max(1, Screen.width), lastSafeArea.yMin / Mathf.Max(1, Screen.height));
+            canvasRect.anchorMax = new Vector2(lastSafeArea.xMax / Mathf.Max(1, Screen.width), lastSafeArea.yMax / Mathf.Max(1, Screen.height));
+            canvasRect.offsetMin = canvasRect.offsetMax = Vector2.zero;
+        }
+
+        private void BuildResultPanel()
+        {
+            var overlay = CreateRect("Result panel", canvasRect);
+            Stretch(overlay);
+            resultPanel = overlay.gameObject;
+            overlay.gameObject.AddComponent<Image>().color = new Color(0.05f, 0.08f, 0.12f, 0.96f);
+            resultTitle = CreateText("Result", overlay, "", 56);
+            Place(resultTitle.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 140f), new Vector2(800f, 180f));
+            var buttonRect = CreateRect("Result action", overlay);
+            Place(buttonRect, new Vector2(0.5f, 0.5f), new Vector2(0f, -40f), new Vector2(560f, 120f));
+            var image = buttonRect.gameObject.AddComponent<Image>();
+            image.color = new Color(0.25f, 0.78f, 0.64f);
+            var button = buttonRect.gameObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
+            button.onClick.AddListener(owner.ResultAction);
+            resultButtonLabel = CreateText("Action label", buttonRect, "", 42);
+            resultButtonLabel.color = new Color(0.07f, 0.14f, 0.17f);
+            Stretch(resultButtonLabel.rectTransform);
+            resultPanel.SetActive(false);
         }
 
         public bool TryLocalPoint(Vector2 screenPoint, out Vector2 local)

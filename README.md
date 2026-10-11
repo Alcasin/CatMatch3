@@ -1,279 +1,252 @@
-# CatMatch3 — M3 specials and objectives prototype
+# CatMatch3 — M4 deterministic puzzle revision
 
-Unity **6000.3.8f1**, 2D Built-In Render Pipeline. Intended target: Android, portrait (9:16).
-M0–M2 foundation, board, controls and resolution are preserved. M3 adds horizontal
-and vertical Striped Cats, chained clearing, normal-cat collection and fixed paw
-cell objectives. Final levels, move limits, Win/Fail and progression remain outside
-this milestone.
+Unity **6000.3.8f1**, 2D Built-In, Android portrait. Two short authored puzzles now
+have **exhaustively verified single winning routes**. Production no longer
+reshuffles: unfinished objectives plus zero moves or a stable deadlock means
+Fail. All ordinary valid swaps still resolve; there is no scripted wrong-move
+filter, runtime search, replacement board or hidden refill adjustment.
 
-## Unity verification
+## Unity setup and verification
 
-1. Open the project normally and let Unity finish importing and compiling.
-2. Run **CatMatch3 > Setup > Apply M3 Specials & Objectives** in Edit Mode. Save any pending
-   Gameplay edits first; setup refuses to silently save unrelated unsaved work.
-3. Open `Assets/_CatMatch3/Scenes/Gameplay.unity` on its own (double-click the
-   scene in the Project window). Select a **9:16** aspect in the Game view and
-   enter Play Mode. Expect 49 colored, labeled tiles, instructions and Reset Board.
-4. Exit Play Mode. Open **Window > General > Test Runner**, select **EditMode**,
-   and run the complete suite, including the original M0 smoke test.
-5. Rerun M3 setup to check that the board root and EventSystem are not duplicated.
+1. Let Unity import/compile. Save or revert pending Gameplay/level-asset edits.
+2. Run **CatMatch3 > Setup > Apply M4 Puzzle Revision** in Edit Mode.
+3. Open **Assets/_CatMatch3/Scenes/Gameplay.unity alone**, choose **9:16**, enter
+   Play Mode. Level 1 should show **3 moves, Orange 0/6, Gray 0/9**.
+4. Replay the ordinary routes below. Next Level loads Level 2 with **4 moves and
+   8 paws**. Win → Game Complete → Play Again returns to Level 1.
+5. Exit Play Mode; run **Window > General > Test Runner > EditMode**, the full suite.
+6. Run **CatMatch3 > Diagnostics > Verify Authored Puzzle Assets** to reproduce
+   proof logs against the actual serialized asset data. Rerun puzzle setup to
+   verify idempotency and preserved references/build entries.
 
-Unity import/compilation, menu execution, rendering and device input require Editor
-verification. A standalone Mono/NUnit run can validate Core tests without launching
-Unity. No headless/batchmode Unity workflow is used.
+The existing Level1.asset and Level2.asset were inspected: both match the known
+previous M4 generated baseline, and Gameplay references their GUIDs correctly.
+They have not been rewritten outside Unity. The revision menu migrates them
+through supported Editor APIs, retaining GUIDs/references. Until it runs, their
+persisted data still contains the previous 18/22-move content.
 
-M3 validation: **55 tests passed in standalone Mono/NUnit**, including all 35
-unchanged M0–M2 tests. Core, Runtime (with and without Editor diagnostics) and Editor
-sources compile against the installed Unity 6000.3.8f1 assemblies. This does not
-confirm Unity Test Runner, menu execution, visual behavior or Android touch.
+Setup preflights BOTH assets before editing either. Known previous M4 content is
+upgraded; already-current puzzles are reused. Unexpected custom data, dirty assets,
+wrong asset types, orphaned metadata and conflicting scene references fail clearly
+without overwriting custom content. Both baseline and current configurations are
+compared by actual tile identities, objectives, paws, moves, names and seed.
+Missing assets are created by the existing M4 setup using the revised defaults.
+Completed upgrades can safely remain after a later infrastructure failure; reruns
+reuse them. Scene edits use the existing Undo/rollback/cleanup workflow.
 
-## Trying the prototype
+The existing Gameplay camera, input, controller, HUD, panels and unrelated objects
+are preserved. Gameplay remains the first enabled shared build scene; SampleScene
+and other entries retain relative order. Scene-specific Editor creation/opening
+needs no temporary/preview-scene activation. Finally blocks close only scenes
+opened by setup and restore the previous valid loaded active scene. No scene YAML
+is manually rewritten. A custom Build Profile overriding the shared scene list
+still needs its own Gameplay startup selection.
 
-Coordinates printed on tiles use `(x,y)`, with `(0,0)` at the bottom-left.
+## Production levels
 
-- Tap a tile, then tap an orthogonal neighbor. Tap the selected tile again to
-  deselect; tap a nonneighbor to select that tile instead.
-- Alternatively, press a tile, drag clearly onto an orthogonal neighbor, and
-  release. Diagonal/ambiguous gestures, releases outside the board and jumps over
-  more than one cell are ignored. One pointer is captured at a time.
-- Valid example: swap `(1,0)` with `(1,1)` to form three Orange cats in the bottom
-  row. Another valid example after reset: `(4,5)` with `(5,5)` forms a Gray column.
-- Invalid example from the initial layout: `(3,0)` with `(4,0)`. The tiles exchange
-  visually and return, with the logical board unchanged.
-- Swaps are blocked in **Swapping**, **Resolving** and **Reshuffling**. Accepted
-  swaps highlight matches in mint, clear all groups together, compact columns,
-  refill from above and repeat for cascades. **Ready** returns only after a full,
-  match-free board with legal moves is verified. Try several consecutive swaps.
-- Status reports the current wave and the previous successful swap's total waves
-  and cascades (waves minus the initial match wave). A deadlock briefly fades and
-  shrinks the board, then reveals a verified reshuffle.
-- Reset restores the exact initial board, **seed 1337**, highlights and animation
-  transforms/visibility. It also cancels a running animation or recovers **Error**.
-  After selecting an M3 QA scenario, Reset restores that scenario's starting tiles
-  (including its initial stripes), original objectives and all eight paw marks.
-  Use **M3 QA > Return to original board** to restore the M1 layout without stripes.
-  Test Reset during clear, fall, refill and shuffle. Resizing the Game view resets the prototype
-  to avoid changing the gesture/animation coordinate basis mid-move.
+The fixed opening layouts remain deliberately authored. Short move limits, revised
+objectives, paw placement and seeds turn them into constrained puzzles. No authored
+refill tape was needed: the existing xorshift32 stream provides reproducible results.
 
-For reproducible Editor-only diagnostics, select **M1 Board Prototype** in the
-Hierarchy during Play Mode. On its **BoardPrototype** component, open the context
-menu (three dots/right-click its header). Each numbered M3 command loads a stable fixture
-and automatically swaps after 0.6 seconds, using seed 1337. Only Ready accepts QA
-commands; Reset remains usable throughout the animation.
+O/B/W/G/S mean Orange/Black/White/Gray/Siamese. Diagrams read **top row first**.
+Assets store **bottom row first**, left to right: **index = y * 7 + x**. (0,0) is
+bottom-left, X points right and Y points upward. Opening tiles are normal cats.
 
-| Context menu command | Expected result |
-| --- | --- |
-| **M3 QA > 1a - Horizontal creation** | `(1,1)` → `(1,0)` creates an Orange horizontal four-run. Three tiles clear; a horizontal stripe pulses and stays at `(1,0)`. |
-| **M3 QA > 1b - Vertical creation** | `(1,1)` → `(0,1)` creates a vertical four-run. The new vertical stripe appears at `(0,1)`, then falls to `(0,0)` and survives. |
-| **M3 QA > 2a - Horizontal activation** | An existing Orange stripe participates in the match and clears all seven cells of row 0. |
-| **M3 QA > 2b - Vertical activation** | The transposed fixture clears all seven cells of column 0. |
-| **M3 QA > 3 - Chain activation** | Stripes at `(0,0)` horizontal, `(4,0)` vertical and `(4,4)` horizontal activate in order. Their union removes 19 tiles once. Three cascade waves follow (four total waves), then Ready. |
-| **M3 QA > 4 - Objective progress** | Horizontal activation collects **3 Orange and 1 Gray**, clears **7/8 paws**, and leaves the fixed mark at `(1,1)` while tiles fall. |
-| **M3 QA > Return to original board** | Restores the ordinary M1 layout, zero objective progress and seed 1337. |
+    Level 1             Level 2
+    WGSOBGG             BWGSOBW
+    OBWGGOB             SOBWGSO
+    GSOBWGS             WGSOBGG
+    BWGSOBW             GSOBWGS
+    SOBWGSO             OBWGGOB
+    WOSOBWG             WOSOBWG
+    OBOGSOB             OBOGSOB
 
-Stripes use a contrasting horizontal or vertical band over the original cat
-color. Cyan frames behind tiles identify fixed paw cells. The development display
-targets **12 Orange**, **10 Gray**, and **8 paws** (bottom row plus `(1,1)`). It updates
-after each visible clear. Creating a stripe does not collect its preserved cat or
-clear its paw: in horizontal creation, expect **3 Orange, 0 Gray and 3/8 paws**,
-with the `(1,0)` paw still present. Consumed existing stripes give paw credit but
-no normal-cat collection credit. Fulfilled objectives display a message without
-ending gameplay. Try another swap after each demo and reset during creation,
-activation, chained effects, fall and refill. Rapid taps/drags must be ignored
-until the complete sequence finishes.
+| Level | Objectives | Move limit | Seed |
+| --- | --- | --- | --- |
+| 1 — Collect the Cats | 6 Orange **and** 9 Gray | 3 | 1339 |
+| 2 — Clear the Paw Prints | All 8 fixed paws | 4 | 141 |
 
-The existing M2 diagnostics remain available:
+Level 2 paws: **(0,0), (1,0), (0,1), (1,1), (0,2), (1,2), (3,3), (3,4)**.
+They deliberately form two lower-column groups plus two preparation targets;
+this makes the eventual vertical stripe useful. Eight paws were retained.
 
-- **M2 QA > Run cascade demo** resets the original layout, uses seed **141** and
-  swaps `(1,0)` / `(1,1)`: exactly **three waves, two cascades**. Observe each clear,
-  fall and refill; rapid taps/drags during these stages must be ignored. After Ready,
-  play another move normally. Reset switches back to seed 1337.
-- **M2 QA > Run deadlock reshuffle demo** shows a fixed match-free board with no
-  legal moves for 0.6 seconds, then reshuffles with seed 1337. The deterministic
-  search accepts attempt **5**. Input stays blocked until the new board appears.
-  Tile counts are preserved (also checked in Core tests).
+### Exact winning routes — development QA only
 
-Diagnostics only run while Ready, are omitted from player builds, and add no
-production UI or serialized scene objects. Exit Play Mode and run the EditMode
-suite after gameplay checks. Open Gameplay alone to use its existing EventSystem.
+Wait for Ready after each pair. The pair can be tapped/swiped in either direction.
+Do not insert other valid moves. Invalid swaps do not affect the route.
 
-Mouse and Android touch go through one uGUI EventSystem with the already installed
-Input System. No legacy mouse polling or separate simulated-touch path is used.
+| Move | Level 1 | Level 2 |
+| --- | --- | --- |
+| 1 | (2,0) ↔ (2,1) | (0,1) ↔ (1,1) |
+| 2 | (4,5) ↔ (4,6) | (1,3) ↔ (1,4) |
+| 3 | (4,5) ↔ (4,6), again after refill | (2,3) ↔ (2,4) |
+| 4 | — | (0,3) ↔ (1,3) |
 
-## Layout and dependencies
+Level 1 logic: first collect the visible Orange triple in row 1. The next move
+makes a four-Gray run across the top row, retaining a horizontal stripe at (3,6)
+and collecting three Gray cats. Reusing the coordinate pair after refill forms
+an Orange triple, drops that stripe and activates it through a Gray cascade.
+The final three-wave turn finishes at **7 Orange / 9 Gray**, with zero moves.
+Intermediate totals are **3/0 → 3/3 → 7/9**. The HUD caps Orange display at 6.
 
-All custom assets live in `Assets/_CatMatch3/`:
+Level 2 logic: clear the three left-column paws, with the cascade creating a
+vertical Black stripe at (0,3). The second move clears a Siamese row and prepares
+the board; it gives no paw credit. The third creates an Orange stripe and removes
+the (3,4) paw. The last move carries the Black stripe into a Black match in row 3,
+clearing column 1 and the remaining row-3 mark. Paw totals are **3 → 3 → 4 → 8**.
+The untouched Orange stripe survives. This uses existing special mechanics.
 
-- `Scenes/`: Gameplay, created through Editor APIs by the setup command.
-- `Scripts/Core/`: `CatMatch3.Core`, with No Engine References enabled. Fixed 7x7
-  `Board`, `BoardPosition`, five `CatType` values, `MatchFinder`, immutable match
-  groups/results, swap results and `PrototypeLayout`. M2 adds explicit occupancy,
-  immutable `BoardSnapshot`, movement/spawn records, `BoardResolver` wave results,
-  `IRandomSource`/`SeededRandom` and `BoardShuffler`. M3 adds immutable `Tile`
-  identity, special effect records, `ObjectiveTracker`/`ObjectiveSnapshot`, and
-  explicit `M3PrototypeLayout` QA fixtures. The M0 marker is retained.
-- `Scripts/Runtime/`: `CatMatch3.Runtime` references Core and Unity UI.
-  `BoardPrototype` owns interaction states and the single Core swap call;
-  `BoardView` generates/resizes the temporary UI and animates it;
-  `BoardTileView` displays a cell and relays pointer events without knowing rules.
-- `Editor/`: Editor-only `CatMatch3.Editor` references Runtime, Unity UI and the
-  existing Input System to create scene objects and wire persistent UI actions.
-- `Tests/EditMode/`: Editor-only `CatMatch3.Tests.EditMode` references Core;
-  `TestAssemblies` supplies NUnit and Unity test-runner references.
-- `Art/`, `Audio/`, `Prefabs/`, `Data/`: reserved asset folders, tracked via metadata.
+The winning routes are not stored as runtime restrictions or displayed in player
+UI. Every legal off-route move is accepted, spends one move and resolves normally.
 
-Core has no Unity or presentation dependencies. Runtime depends on Core, never
-the reverse. Editor and test assemblies are excluded from player builds.
-Match detection scans maximal horizontal/vertical runs, retains orientation,
-type and length, and also returns a unique coordinate union. Invalid swaps roll
-back; accepted swaps must produce a match involving a swapped endpoint. Same-cat
-swaps cannot legalize existing matches. Layout inputs and board snapshots are copied.
-Unity Test Framework 1.6.0 and Input System 1.18.0 were already in the template;
-the package manifest and lockfile are preserved without additions or upgrades.
+## Verification evidence and method
 
-## Resolution and deterministic randomness
+| Level | Status | Winning routes | States | Transitions | Replayed moves | Exhaustive |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Unique | 1 | 333 | 332 | 931 | Yes |
+| 2 | Unique | 1 | 2,420 | 2,419 | 9,294 | Yes |
 
-Core resolves synchronously and records every wave's before/clear/gravity/refill
-snapshots, unique removals with original tile identities, ordered special
-activations, creations, objective progress, survivor movements and new tile spawns. Runtime
-keeps input locked while it animates those records in order, then displays the
-final snapshot. Fixed visual slots are rebound at each stage boundary after their
-tiles reach the correct positions. The model may already hold the final state
-while the view plays the intermediate states; input cannot act on it then.
+Both searches produced **zero resolution errors**, reached the full move limit
+without pruning unexplored paths, and exhausted every legal continuation. Typical
+standalone times were about **46 ms / 533 ms** on this machine; timing varies.
+These are complete route counts, not merely known or shortest solutions.
 
-`Board` owns one `Tile[,]` identity array plus occupancy flags. Every tile retains
-one of the five cat types and a stripe orientation (None, Horizontal, Vertical).
-`GetCell`/`TryGetCell`/`CopyCells` remain color-only compatibility APIs; use
-`GetTile`/`TryGetTile`/`CopyTiles` to preserve specials when copying a board.
-Snapshots and movement records retain full identities. Model state is created in
-Play Mode, not serialized in Gameplay; the existing scene's only controller
-reference remains its BoardView. No scene serialization migration is needed.
+PuzzleVerifier is compiled only for **UNITY_EDITOR or CATMATCH3_OFFLINE**. It is
+absent from the player Core assembly. It enumerates each adjacent right/up pair
+once and uses actual GameplaySession/BoardResolver rules for every candidate.
+Routes stop immediately at Win/Fail. Invalid swaps are omitted.
 
-Empty cells are tracked separately from the five cat types. `TryGetCell` returns
-false for an empty cell; `GetCell` throws there. `Capture` supports empty cells;
-`CopyCells` requires a full board. Empty cells break match runs. Clearing removes
-the complete clear union once except preserved creation anchors, gravity preserves bottom-to-top survivor order,
-and refill visits columns left-to-right and vacant cells bottom-to-top. Refill
-matches are allowed and become the next cascade wave.
+Each search branch is represented losslessly by the immutable level/initial seed
+and its full successful-swap history. A fresh session replays that history before
+the next move. This reconstructs the complete current board, stripe orientations,
+objective counts, remaining paws, moves, RNG state and terminal state, without
+sharing mutable board/tracker/RNG instances. There is no approximate resolver,
+state hashing, memoization or merging of paths; distinct histories remain distinct
+even if they converge to the same logical state. Replay costs are explicitly bounded.
 
-`SeededRandom` uses a fixed xorshift32 algorithm with bounded integer draws;
-seed 0 maps to `0x6d2b79f5`. Reset starts a fresh seed-1337 sequence. Tests can
-substitute scripted draws, including a deliberately constructed two-wave cascade.
-Invalid swaps do not call resolution or consume randomness.
+Default per-verification limits: **50,000 transitions**, **500,000 replayed moves**,
+**10 seconds**, and a **16-move depth cap**, additionally bounded by session moves.
+The 3/4-move production puzzles finish well inside these limits. Outcomes:
 
-After stability, legal-move detection checks right/up neighbor pairs using the
-same endpoint-match and unequal-type rules as swapping. Each temporary exchange
-is restored in `finally`. Deadlocks trigger at most **256** Fisher–Yates attempts
-using the same random source and original full tile multiset, including stripes,
-orientations and cat types. Paw state and objective counts are untouched. Only a match-free,
-playable candidate is committed. An obvious impossible count (more than 35 cats
-of one type) fails immediately. Exhaustion leaves the board unchanged and reports
-failure; there is no tile-replacement fallback or constraint solver.
+- **Unsolvable:** exhaustive, zero wins.
+- **Unique:** exhaustive, exactly one win, no unresolved/error branches.
+- **Multiple:** at least two distinct winning routes found; search stops at two,
+  so the count is a lower bound and Exhaustive is false.
+- **Inconclusive:** work/time/depth budget or resolution failure prevents proof.
+  One discovered winning route is never promoted to Unique in this case.
 
-At **100 waves**, remaining matches produce an explicit failed resolution with
-the unresolved snapshot. Runtime enters **Error**, logs the reason and offers
-Reset; it never presents that board as Ready. Faulty random sources or animation
-exceptions also enter Error. These bounded safeguards favor a recoverable failure
-over silently changing the rules. A bounded shuffle is not a proof that every
-possible multiset can be rearranged.
+NUnit includes small zero/one/multiple fixtures, an incomplete search that has
+already found one route, replay/depth budget checks, unordered-pair enumeration,
+branch isolation, reversal equivalence and full production uniqueness proofs.
+The asset-verification menu uses the same utility on LevelDefinition.ToConfiguration.
+Standalone Core compilation can enable CATMATCH3_OFFLINE to call the same verifier.
+No solver, route checking or uniqueness verification runs during player gameplay.
 
-## Special and objective rules
+### Undirected swap identity
 
-Matching uses CatType regardless of stripe orientation. Swapping a stripe still
-requires the normal endpoint-match rules; identical-color swaps remain invalid,
-even between two different stripes. There is no tap activation or special-pair
-bonus.
+The old resolver preferred the supplied swap destination for special creation;
+reversing a gesture could therefore produce a different anchor. Puzzle sessions
+normalize this choice to the endpoint with the lower **y * 7 + x** index. Thus
+A↔B is one decision with identical outcomes in either direction, including future
+refills. All normal validity, creation, activation, gravity and cascade rules
+stay in the existing engine. Legacy M2/M3 diagnostics retain their former
+supplied-destination behavior. This is tested using actual surviving stripes.
 
-Each maximal straight run of **4 or more** can create **one** stripe of the run's
-orientation and CatType. A run containing an existing stripe activates it and
-creates no replacement from that run. New stripes are excluded from the activation
-queue of their creation wave, but can activate through later cascade matches.
+## Gameplay, failure and presentation
 
-Creation placement and overlap rules:
+BoardResolver has an explicit ReshufflePolicy. **GameplaySession always passes
+Disabled**. Legacy diagnostics explicitly pass Automatic; existing shuffler tests
+continue exercising Automatic. There is one resolver and one production controller.
 
-1. On the first wave after an accepted swap, prefer the second swap coordinate
-   (destination) if it belongs to the qualifying run.
-2. Otherwise, including every cascade wave, use the leftmost horizontal or
-   bottommost vertical member.
-3. Process horizontal groups bottom-to-top, then vertical groups left-to-right,
-   following MatchFinder order. If two proposals share an anchor, the first wins;
-   distinct anchors may both survive an overlap.
-4. Any existing stripe effect hitting the proposed anchor cancels that creation;
-   no alternative anchor is searched. Effects take priority. Ordinary overlapping
-   match membership alone does not remove an accepted creation anchor.
-5. Preserve accepted anchors as tiles, transform them into stripes, and let them
-   fall normally with the other survivors.
+After a valid swap the session spends exactly one move, resolves every wave,
+then evaluates **resolution error → objective Win → OutOfMoves → NoLegalMoves**.
+Win takes precedence when objectives complete at zero moves and/or a deadlock.
+NoLegalMoves never draws shuffle randomness, changes progress, restores moves or
+replaces the board. A stable no-move resolution itself is successful; the session
+then supplies the loss reason. Fail blocks further input and offers Retry.
 
-Existing stripes in the complete match union are queued in deterministic
-first-detected order. Expand the queue breadth-first, visiting row hits
-left-to-right and column hits bottom-to-top. Each existing special is queued
-once, so cycles and intersections terminate after at most 49 activations. The
-union of ordinary matches and effects is removed once, after creation conflicts
-are decided. Runtime displays matched tiles, each activation/chain sweep, the
-simultaneous clear and objective update, creation pulses, fall and refill in order.
+BoardPrototype presents all immutable wave snapshots, special effects, clear,
+gravity, refill and cascades before showing the result panel. NoLegalMoves uses
+“No more matches available. Try again!”; move exhaustion uses “Out of Moves”.
+Production never enters the reshuffle animation. The existing HUD and result-panel
+infrastructure are reused, with no final-art/UI overhaul.
 
-`ObjectiveTracker` copies ordinary target/mark data and persists across swaps.
-It receives the wave's actual unique removals. Only removed **normal** cats count
-toward collection; counts are actual totals and may exceed targets. Existing
-specials, preserved creation anchors, swapping, falling and refill give no cat
-credit. Any removed tile, including a consumed special, clears its cell's paw
-once. Remaining marks belong to fixed coordinates, never movable Tile identity.
-Read-only progress snapshots expose each target, collected count, remaining marks,
-paw totals and fulfillment. Old snapshots remain immutable after further swaps or
-Reset. No score, move counter or completion transition is implemented.
+Normal production loading requires a fixed asset seed. Restart/Retry restores
+that exact seed and authored opening, full moves, original paws/targets, zero
+progress and Ready. No refill cursor/tape or fallback is added. Core retains its
+previous optional fallback-seed constructor for diagnostics/regression fixtures;
+production refuses unseeded authoring. SeededRandom's implementation is unchanged.
 
-## Setup behavior and safety
+Restart first cancels all controller coroutines, then restores model and snapshots,
+selection, highlights, transforms, pointer capture and HUD. Nested view iterators
+have no independent delayed callbacks. Level transition and re-enable use the
+same cancellation behavior. Game-view resize/safe-area changes still intentionally
+restart the current production level to preserve its gesture coordinate basis.
 
-**Apply M3 Specials & Objectives** and **Apply M2 Resolution** delegate to the
-existing **Apply M1 Board** command. M3 requires no additional serialized configuration: the existing BoardPrototype
-and BoardView supply the new behavior and create their transient visuals in Play
-Mode. The scene itself has not been rewritten for M3.
+Flow stays Level 1 Win → Next Level → Level 2 Win → Game Complete → Play Again →
+Level 1. Retry restarts the current production level. Tutorial remains nonblocking,
+Level 1 only, dismissed by the first valid production swap. Once dismissed it does
+not repeat during Restart/Retry/Play Again in the same Play Mode session.
 
-**Apply M1 Board** opens Gameplay additively only if needed and creates one scene
-root with Canvas, CanvasScaler, GraphicRaycaster, BoardView and BoardPrototype.
-The controller's serialized view reference is assigned automatically. An owned
-EventSystem is created only when Gameplay has none, using persistent action
-references from the existing `Assets/InputSystem_Actions.inputactions` asset.
-An existing compatible user EventSystem is reused without rewriting its wiring.
-The 49 tile visuals, texts and reset button are created in Play Mode; no sprites,
-prefabs or placeholder assets need to be imported.
+## Exact Unity QA
 
-Reruns reuse the BoardPrototype root and repair missing generated components or
-references. Conflicting roots, multiple boards/EventSystems, incompatible UI
-configuration and dirty loaded Gameplay scenes fail clearly. The command groups
-its edits for Undo and rolls them back on failure. It saves Gameplay, closes only
-scenes it opened, and restores the previously active scene if needed. It never
-requires activation of the scene being edited. Cameras, unrelated objects, build
-entries, project-wide input settings and package dependencies are preserved.
+1. **Normal completion:** run the revision setup, play the routes above, check
+   per-turn progress and Win at zero moves. Next Level gives fresh 4-move Level 2;
+   Game Complete/Play Again gives fresh 3-move Level 1.
+2. **Invalid swap:** fresh Level 1, (3,0) ↔ (4,0) rolls back; moves remain 3.
+3. **Incorrect valid move:** fresh Level 1, (1,0) ↔ (1,1) resolves normally and
+   leaves 2 moves, Orange 3 / Gray 0. Continue (5,4) ↔ (5,5), then (1,5) ↔ (1,6).
+   Each is valid. Finish Orange 3 / Gray 6, zero moves, Fail → Retry. Exhaustive
+   verification also rules out every other winning continuation of that first move.
+4. **NoLegalMoves:** on BoardPrototype's Play Mode context menu, select
+   **M4 Puzzle QA / No Legal Moves - genuine swap**. A seed-300 transient fixture
+   automatically swaps (2,5) ↔ (2,6), makes a four-run, preserves an Orange stripe
+   and refills normally. Expect Orange 3/99, **2 moves left**, a stable deadlock,
+   no fade/shuffle/replacement and Fail with the no-matches explanation. Retry
+   restores the selected production puzzle.
+5. **Last-move cascade Win:** **M4 QA / Final move cascade Win** still uses a
+   one-move transient fixture with seed 141 and target Orange 6. Expect 3 waves,
+   Orange 3 after the first two, then 6 and Win at zero moves. Also verify the real
+   Level 1 final move's three waves before its panel appears.
+6. **Restart/input:** press Restart during exchange, stripe creation/activation,
+   clear, fall, refill and cascades. Expect the identical production opening and
+   seed; subsequent winning route must replay unchanged. Rapid taps/drags and
+   extra pointers during resolution or terminal states must not alter board/moves.
+7. **Legacy diagnostics:** M2 cascade, M2 deadlock reshuffle (attempt 5), and all
+   M3 creation/activation/chain/objective fixtures remain. They show DIAGNOSTIC
+   with unlimited moves. **Diagnostics / Reset current M2-M3 fixture** resets that
+   fixture; visible Restart returns to production. M4 QA Win/Fail commands still
+   exercise Next Level/Play Again/Retry through transient goals. Transitions clear
+   diagnostics and load real asset data. All context menus are excluded from players.
+8. **Setup/UI:** rerun revision setup in Edit Mode, confirm no duplicates and
+   preserved asset GUIDs/scene references. Verify portrait readability, safe areas,
+   mouse/touch controls, result button bindings and the complete EditMode suite.
 
-**Apply M0 Foundation** remains available and unchanged:
+## Static validation and limits
 
-The command creates Gameplay only if the destination is unused. The new scene
-contains one tagged orthographic Main Camera at `(0, 0, -10)`, size 5, with a solid
-background and an AudioListener. It marks and saves the new scene, then closes
-only that temporary scene and restores the previously active scene. No user
-scene is closed or resaved. An existing Gameplay scene is retained exactly;
-rerunning setup deliberately does not repair or reset later user edits.
-Conflicting/unimported files and orphaned metadata produce Console errors.
+**101/101 standalone Mono/NUnit tests passed.** All 88 previous cases remain;
+authored-content expectations/routes were updated to the new approved design,
+and legacy reshuffle assertions now explicitly select Automatic. Thirteen focused
+puzzle cases were added. Matching, swap validation, gravity/refill, special chains,
+objective semantics, last-move priority and the infrastructure smoke test pass.
 
-Gameplay is appended to the shared build scene list if missing, or its existing
-entry is enabled. Other entries and their order are preserved, including
-SampleScene. Therefore SampleScene remains the first build scene in this fresh
-project; Gameplay is not silently promoted to the startup scene. A future custom
-Build Profile that overrides the shared scene list must include Gameplay itself.
+Core (Editor/offline and player), Runtime (Editor and player), and Editor compile
+against the installed Unity 6000.3.8f1 assemblies. Only CS0649 warnings for fields
+assigned by Unity serialization remain. Core stays free of engine references;
+no assembly structure/package/render-pipeline/input/project-setting changes were
+introduced by this revision. Existing user-generated Gameplay, build settings
+and level assets were inspected and preserved on disk pending the Editor migration.
 
-Setup sets the supported mobile default orientation to Portrait (also used by
-Android) and saves assets/settings. It does not switch platforms, install Android
-modules, force camera aspect ratios or change the render pipeline. The 9:16 Game
-view setting is an Editor preview choice, not a restriction on device resolution.
-Setup runs only from the menu, never automatically on script import.
+Static review covers verifier budgets/counting/replay, production policy, terminal
+ordering, input gating, cancellation, asset conversion/migration/idempotency,
+metadata/whitespace, scene references, startup build order and Git scope.
 
-## Git
+Unity import, menu execution, asset migration, Test Runner, rendering, coroutine
+cancellation inside Unity and Android touch have **not** been executed here.
+Uniqueness proves the logical puzzle under the documented fixed rules/seeds, not
+human readability or fairness. Refill is deterministic but upcoming cats are not
+previewed; whether the short routes feel sufficiently discoverable still needs
+manual playtesting. Limits/objectives/seed changes require fresh exhaustive proof.
 
-The repository's existing Git configuration is preserved. M3 work is left
-uncommitted; no commit or push is performed. `.gitignore` excludes Unity
-caches, builds and generated IDE files while keeping assets and `.meta` files.
-`.gitattributes` normalizes source/YAML text and identifies common binary assets;
-Git LFS and a custom merge driver are not required.
-
-Stop at M3 until the prototype is verified in Unity and the milestone is accepted.
+No M5 art, extra levels/mechanics, runtime hints, batchmode, commit, push, tag or
+publish. Await the user's Unity QA and explicit acceptance.

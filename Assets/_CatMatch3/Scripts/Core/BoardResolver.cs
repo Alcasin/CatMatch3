@@ -3,15 +3,19 @@ using System.Collections.Generic;
 
 namespace CatMatch3.Core
 {
+    public enum ReshufflePolicy { Automatic, Disabled }
+
     public static class BoardResolver
     {
         public const int DefaultMaxWaves = 100;
         public static ResolutionResult Resolve(Board board, IRandomSource random,
             int maxWaves = DefaultMaxWaves, int maxShuffleAttempts = BoardShuffler.DefaultMaxAttempts,
-            ObjectiveTracker objectives = null, BoardPosition? swapDestination = null)
+            ObjectiveTracker objectives = null, BoardPosition? swapDestination = null,
+            ReshufflePolicy reshufflePolicy = ReshufflePolicy.Automatic)
         {
             if (board == null) throw new ArgumentNullException(nameof(board));
             if (random == null) throw new ArgumentNullException(nameof(random));
+            if (!Enum.IsDefined(typeof(ReshufflePolicy), reshufflePolicy)) throw new ArgumentOutOfRangeException(nameof(reshufflePolicy));
             if (!board.IsFull) throw new InvalidOperationException("Resolution must start with a full board.");
             if (maxWaves < 1) throw new ArgumentOutOfRangeException(nameof(maxWaves));
             if (maxShuffleAttempts < 1) throw new ArgumentOutOfRangeException(nameof(maxShuffleAttempts));
@@ -40,7 +44,8 @@ namespace CatMatch3.Core
             }
 
             ReshuffleResult reshuffle = null;
-            if (!board.HasLegalMove()) reshuffle = BoardShuffler.TryReshuffle(board, random, maxShuffleAttempts);
+            if (reshufflePolicy == ReshufflePolicy.Automatic && !board.HasLegalMove())
+                reshuffle = BoardShuffler.TryReshuffle(board, random, maxShuffleAttempts);
             bool success = reshuffle == null || reshuffle.Success;
             return new ResolutionResult(success, success ? null : reshuffle.Error,
                 waves, initial, board.Capture(), reshuffle, initialObjectives, objectives?.Capture());

@@ -464,6 +464,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: CatMatch3.Runtime::CatMatch3.Runtime.BoardPrototype
   view: {fileID: 2002813753}
+  level1: {fileID: 11400000, guid: 0653cbaa78ed6e74c96476d2ca6a7399, type: 2}
+  level2: {fileID: 11400000, guid: 18a1d02d6e1d9904783b03e684623c32, type: 2}
 --- !u!114 &2002813753
 MonoBehaviour:
   m_ObjectHideFlags: 0

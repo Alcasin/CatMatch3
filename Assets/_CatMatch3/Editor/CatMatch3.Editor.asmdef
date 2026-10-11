@@ -1,6 +1,6 @@
 {
     "name": "CatMatch3.Editor",
     "rootNamespace": "CatMatch3.Editor",
-    "references": ["CatMatch3.Runtime", "UnityEngine.UI", "Unity.InputSystem"],
+    "references": ["CatMatch3.Core", "CatMatch3.Runtime", "UnityEngine.UI", "Unity.InputSystem"],
     "includePlatforms": ["Editor"]
 }
