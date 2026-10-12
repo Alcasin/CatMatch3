@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 namespace CatMatch3.Runtime
 {
-    /// <summary>Temporary tile visual and pointer relay; contains no board rules.</summary>
+    /// <summary>Cat sprite, special indicator and pointer relay; contains no board rules.</summary>
     public sealed class BoardTileView : MonoBehaviour, IPointerDownHandler, IPointerUpHandler,
         IDragHandler, IInitializePotentialDragHandler
     {
@@ -13,25 +13,45 @@ namespace CatMatch3.Runtime
         private BoardPosition position;
         private Image border;
         private Image face;
-        private Text label;
+        private BoardView spriteSource;
         private CanvasGroup visibility;
-        private Image stripe;
+        private Image firstStripeBand;
+        private Image secondStripeBand;
 
         public RectTransform Rect => (RectTransform)transform;
 
-        public void Initialize(BoardPrototype controller, BoardPosition cell, Image body, Text text)
+        public void Initialize(BoardPrototype controller, BoardPosition cell, Image body, BoardView visuals)
         {
             owner = controller;
             position = cell;
             border = GetComponent<Image>();
             face = body;
-            label = text;
+            spriteSource = visuals;
             visibility = gameObject.AddComponent<CanvasGroup>();
-            var stripeObject = new GameObject("Stripe", typeof(RectTransform), typeof(Image));
-            stripeObject.transform.SetParent(face.transform, false);
-            stripe = stripeObject.GetComponent<Image>();
-            stripe.raycastTarget = false;
-            stripe.enabled = false;
+            firstStripeBand = CreateStripeBand("Stripe edge 1");
+            secondStripeBand = CreateStripeBand("Stripe edge 2");
+        }
+
+        private Image CreateStripeBand(string name)
+        {
+            var bandObject = new GameObject(name, typeof(RectTransform), typeof(Image));
+            // Siblings of the padded face: bands move/fade with the tile, outside its artwork.
+            bandObject.transform.SetParent(transform, false);
+            var band = bandObject.GetComponent<Image>();
+            band.color = new Color(1f, 0.96f, 0.65f);
+            band.raycastTarget = false;
+            band.enabled = false;
+            var outline = bandObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0.08f, 0.10f, 0.15f, 0.9f);
+            outline.effectDistance = new Vector2(1f, -1f);
+            return band;
+        }
+
+        private static void PlaceStripeBand(Image band, Vector2 min, Vector2 max)
+        {
+            band.rectTransform.anchorMin = min;
+            band.rectTransform.anchorMax = max;
+            band.rectTransform.offsetMin = band.rectTransform.offsetMax = Vector2.zero;
         }
 
         public void Show(CatType type)
@@ -43,23 +63,20 @@ namespace CatMatch3.Runtime
         {
             var type = tile.Type;
             SetVisibility(1f, 1f);
-            Color[] colors =
+            face.sprite = spriteSource.GetCatSprite(type);
+            face.color = Color.white;
+            firstStripeBand.enabled = secondStripeBand.enabled = tile.IsSpecial;
+            // 2.5%-thick edge bands stay outside the face's 6% padding; leave the corners clear.
+            if (tile.Stripe == StripeOrientation.Vertical)
             {
-                new Color(1f, 0.58f, 0.22f), new Color(0.17f, 0.16f, 0.23f),
-                new Color(0.94f, 0.95f, 0.98f), new Color(0.53f, 0.60f, 0.69f),
-                new Color(0.81f, 0.70f, 0.52f)
-            };
-            face.color = colors[(int)type];
-            label.color = type == CatType.Black ? Color.white : new Color(0.10f, 0.12f, 0.17f);
-            label.text = type.ToString().ToUpperInvariant() + "\n" + position;
-            stripe.enabled = tile.IsSpecial;
-            stripe.color = type == CatType.Black ? Color.white : new Color(0.12f, 0.10f, 0.20f);
-            var stripeRect = stripe.rectTransform;
-            bool horizontal = tile.Stripe == StripeOrientation.Horizontal;
-            stripeRect.anchorMin = horizontal ? new Vector2(0f, 0.15f) : new Vector2(0.85f, 0f);
-            stripeRect.anchorMax = horizontal ? new Vector2(1f, 0.15f) : new Vector2(0.85f, 1f);
-            stripeRect.anchoredPosition = Vector2.zero;
-            stripeRect.sizeDelta = horizontal ? new Vector2(-12f, 10f) : new Vector2(10f, -12f);
+                PlaceStripeBand(firstStripeBand, new Vector2(0.10f, 0.015f), new Vector2(0.90f, 0.04f));
+                PlaceStripeBand(secondStripeBand, new Vector2(0.10f, 0.96f), new Vector2(0.90f, 0.985f));
+            }
+            else if (tile.Stripe == StripeOrientation.Horizontal)
+            {
+                PlaceStripeBand(firstStripeBand, new Vector2(0.015f, 0.10f), new Vector2(0.04f, 0.90f));
+                PlaceStripeBand(secondStripeBand, new Vector2(0.96f, 0.10f), new Vector2(0.985f, 0.90f));
+            }
             SetEmphasis(false, false);
         }
 
@@ -73,9 +90,6 @@ namespace CatMatch3.Runtime
         {
             border.color = matched ? new Color(0.24f, 1f, 0.68f) :
                 selected ? new Color(1f, 0.85f, 0.20f) : new Color(0.25f, 0.30f, 0.39f);
-            float inset = selected || matched ? 7f : 3f;
-            face.rectTransform.offsetMin = Vector2.one * inset;
-            face.rectTransform.offsetMax = Vector2.one * -inset;
         }
 
         public void OnPointerDown(PointerEventData data)

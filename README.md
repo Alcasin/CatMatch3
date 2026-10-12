@@ -1,5 +1,43 @@
 # CatMatch3 — M4 deterministic puzzle revision
 
+## M5-A cat sprite integration
+
+After compilation, run **CatMatch3 > Setup > Apply M5-A Cat Sprites** once in
+Edit Mode, then open Gameplay in 9:16 and enter Play Mode. This command binds
+the five existing `Art/Sprites/Cats/Cat_<Type>.png` Single Sprites to serialized
+fields on the existing BoardView and saves Gameplay through Unity Editor APIs.
+It validates all five imports and existing scene wiring before changing anything,
+preserves custom bindings, and is safe to rerun. Save or revert unsaved Gameplay
+edits before applying it. No per-tile assignment or M4 level migration is needed.
+
+All tile snapshots and refill/diagnostic visuals use the same explicit
+Orange/Black/White/Gray/Siamese mapping. UI Images preserve aspect ratio, use
+white tint and the complete sprite rectangle, and leave a 6% margin on each side.
+Square cell roots/hitboxes, selection/match highlighting, cyan paw frames and
+horizontal/vertical stripe indicators remain. Special cats use thin bright edge
+bands: left/right for horizontal (row clear), top/bottom for vertical (column clear),
+outside the cat artwork.
+The bands have a subtle dark outline and clear corners, and follow the tile through
+existing animations. This refinement requires no additional setup. Cat-name/coordinate
+text is removed from tiles; coordinate
+Hierarchy names, status information and development context-menu fixtures remain.
+Missing bindings produce a setup error instead of silently displaying placeholders.
+PNGs, importer metadata, Core, levels, animation timing and HUD layout are unchanged.
+
+Manual QA: check all five cats and unclipped ears/whiskers; valid and invalid swaps
+using tap/swipe; stripe creation/activation and paw clearing; gravity/refill/cascades;
+Restart during animation, Retry, Next Level and Play Again. Run the existing M2/M3
+and M4 context-menu fixtures and all 101 EditMode tests. Exit Play Mode, reopen
+Gameplay, and confirm the five sprite references remain saved; rerun setup to
+confirm it creates no duplicate content.
+
+For edge-band QA, use BoardPrototype's **M3 QA** context menus in Play Mode:
+**1a/1b** horizontal/vertical creation, **2a/2b** horizontal/vertical activation,
+and **3** chain activation. Check both directions remain clear during selection,
+swaps/rollback, clearing, falling, refill and cascades; normal cats have no bands.
+Complete both production levels and test Restart/Retry/Next Level/Play Again,
+then run all 101 Unity EditMode tests.
+
 Unity **6000.3.8f1**, 2D Built-In, Android portrait. Two short authored puzzles now
 have **exhaustively verified single winning routes**. Production no longer
 reshuffles: unfinished objectives plus zero moves or a stable deadlock means

@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
@@ -11,6 +12,12 @@ namespace CatMatch3.Runtime
     [RequireComponent(typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster))]
     public sealed class BoardView : MonoBehaviour
     {
+        [SerializeField] private Sprite orangeCatSprite;
+        [SerializeField] private Sprite blackCatSprite;
+        [SerializeField] private Sprite whiteCatSprite;
+        [SerializeField] private Sprite grayCatSprite;
+        [SerializeField] private Sprite siameseCatSprite;
+
         private readonly BoardTileView[,] tiles = new BoardTileView[Board.Width, Board.Height];
         private BoardPrototype owner;
         private RectTransform boardRect;
@@ -33,9 +40,32 @@ namespace CatMatch3.Runtime
 
         public float CellSize => step;
 
+        public Sprite GetCatSprite(CatType type)
+        {
+            Sprite sprite;
+            switch (type)
+            {
+                case CatType.Orange: sprite = orangeCatSprite; break;
+                case CatType.Black: sprite = blackCatSprite; break;
+                case CatType.White: sprite = whiteCatSprite; break;
+                case CatType.Gray: sprite = grayCatSprite; break;
+                case CatType.Siamese: sprite = siameseCatSprite; break;
+                default: throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown cat visual.");
+            }
+            if (sprite == null)
+                throw new InvalidOperationException($"Missing {type} cat sprite. Run CatMatch3 > Setup > Apply M5-A Cat Sprites.");
+            return sprite;
+        }
+
+        public void ValidateCatSprites()
+        {
+            foreach (CatType type in Enum.GetValues(typeof(CatType))) GetCatSprite(type);
+        }
+
         public void Build(BoardPrototype controller)
         {
             if (boardRect != null) return;
+            ValidateCatSprites();
             owner = controller;
             canvasRect = CreateRect("Safe area", transform);
             ApplySafeArea();
@@ -73,16 +103,18 @@ namespace CatMatch3.Runtime
                     var tileRect = CreateRect("Tile " + position, boardRect);
                     tileRect.gameObject.AddComponent<Image>();
                     var faceRect = CreateRect("Face", tileRect);
-                    Stretch(faceRect);
+                    // Proportional padding keeps the complete sprite inside the square hitbox.
+                    faceRect.anchorMin = Vector2.one * 0.06f;
+                    faceRect.anchorMax = Vector2.one * 0.94f;
+                    faceRect.offsetMin = faceRect.offsetMax = Vector2.zero;
                     var face = faceRect.gameObject.AddComponent<Image>();
                     face.raycastTarget = false;
-                    var label = CreateText("Cat", faceRect, "", 21);
-                    Stretch(label.rectTransform);
-                    label.resizeTextForBestFit = true;
-                    label.resizeTextMinSize = 10;
-                    label.resizeTextMaxSize = 23;
+                    face.type = Image.Type.Simple;
+                    face.preserveAspect = true;
+                    face.useSpriteMesh = false;
+                    face.color = Color.white;
                     var tile = tileRect.gameObject.AddComponent<BoardTileView>();
-                    tile.Initialize(owner, position, face, label);
+                    tile.Initialize(owner, position, face, this);
                     tiles[x, y] = tile;
                 }
             }

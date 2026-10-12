@@ -478,6 +478,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 703823a6150747288eecdadc87d8884b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: CatMatch3.Runtime::CatMatch3.Runtime.BoardView
+  orangeCatSprite: {fileID: 21300000, guid: 7a9c8d0974c421442bc2f3451f01765e, type: 3}
+  blackCatSprite: {fileID: 21300000, guid: 6ec4137c0685e5e498cab7317ce4d6cd, type: 3}
+  whiteCatSprite: {fileID: 21300000, guid: d59a9027102bdd945a7638b1cc1b2615, type: 3}
+  grayCatSprite: {fileID: 21300000, guid: 00f36273f0876444e8d17679150deb36, type: 3}
+  siameseCatSprite: {fileID: 21300000, guid: e3420c6a4a051214aa1adf4eba596808, type: 3}
 --- !u!114 &2002813754
 MonoBehaviour:
   m_ObjectHideFlags: 0
