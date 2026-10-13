@@ -1,5 +1,51 @@
 # CatMatch3 — Gameplay presentation
 
+## M5-D1 gameplay feedback
+
+No Editor setup is needed. The existing ordered snapshot/coroutine presentation
+now gives matched cats a quick 5% pop followed by a smooth fade and gentle shrink
+within the original 0.22-second clear. Later waves use an 8% pop and a small,
+outlined `Combo!` that rises over the first clearing cell and fades in the same
+clear slot. The cascade flag comes from the existing wave index, with no scoring
+or objective changes.
+
+Gravity and refill retain their original paths and durations (0.30/0.38 seconds),
+with monotonic cubic ease-out for a responsive fall and soft stop. No bounce or
+extra landing phase is added. Valid/invalid swap motion, special-creation pulse
+and diagnostic reshuffle animation remain unchanged.
+
+The existing single stripe Image now sweeps outward from the activated cat along
+its row or column in soft cyan/turquoise, at 18% cell thickness and at most 32%
+opacity. Position/direction come directly from each SpecialActivation, including
+chain entries. It still takes 0.22 seconds and does not replace or move stripe
+indicators.
+
+The combo Text is created once with raycasts disabled; the stripe Image is reused.
+No objects, textures or callbacks are created per effect frame. All effects run
+inside the existing BoardPrototype coroutine wrapper, with no separate tween or
+background coroutine. Iterator disposal hides temporary feedback, and explicit
+cleanup also runs on cancellation, disable, error, snapshots and terminal results.
+Restart/Retry/level changes still cancel before restoring the board; snapshots
+restore tile alpha, scale, positions and emphasis. Input gating and final-result
+priority are unchanged.
+
+Validation: player/Editor compilation against Unity 6000.3.8f1 and all 101 standalone
+NUnit tests passed. Managed checks passed for 201 easing/pop samples, five real
+horizontal/vertical/chain activations at three board sizes, the three-wave cascade
+fixture and 100 nested-iterator cancellations. These cancellation checks exercise
+the managed wrapper, not Unity's native StopAllCoroutines or UI rendering.
+
+Manual Unity QA: check valid/invalid tap and swipe swaps, small clear pops and
+smooth falls/refills; run M2 cascade, M3 horizontal/vertical creation/activation
+and chain fixtures. Confirm Combo appears only on later waves and all temporary
+feedback disappears. Restart during each animation phase and switch diagnostic
+fixtures; check Retry, Next Level and Play Again repeatedly for stale effects or
+hierarchy growth. Replay both winning routes and M4 final-move cascade Win, plus
+both failure fixtures. Check input remains gated during resolution, terminal
+panels appear after effects end, and paw/stripe/selection visuals remain intact.
+Run all 101 Unity EditMode tests. Unity Test Runner, native cancellation and visual
+Play Mode verification were not run here.
+
 ## M5-C result panels
 
 No Editor setup or scene assignments are required. A single reusable rounded cream

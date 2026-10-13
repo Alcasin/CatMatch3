@@ -28,6 +28,7 @@ namespace CatMatch3.Runtime
         private CanvasGroup boardVisibility;
         private readonly PawTargetGraphic[,] pawMarks = new PawTargetGraphic[Board.Width, Board.Height];
         private Image stripeEffect;
+        private Text comboFeedback;
         private Text levelNumber;
         private Text levelTitle;
         private Text movesLabel;
@@ -238,6 +239,14 @@ namespace CatMatch3.Runtime
             stripeEffect.raycastTarget = false;
             stripeEffect.enabled = false;
 
+            comboFeedback = CreateText("Cascade feedback", boardRect, "Combo!", 28);
+            comboFeedback.fontStyle = FontStyle.Bold;
+            comboFeedback.color = Cream;
+            var comboOutline = comboFeedback.gameObject.AddComponent<Outline>();
+            comboOutline.effectColor = new Color(0.26f, 0.36f, 0.43f, 0.6f);
+            comboOutline.effectDistance = new Vector2(1f, -1f);
+            comboFeedback.enabled = false;
+
             restartRect = CreatePanel("Restart current level", canvasRect, new Color32(0xE8, 0xAD, 0x67, 255));
             var resetImage = restartRect.GetComponent<Image>();
             resetImage.raycastTarget = true;
@@ -344,8 +353,7 @@ namespace CatMatch3.Runtime
         {
             boardVisibility.alpha = 1f;
             boardRect.localScale = Vector3.one;
-            stripeEffect.enabled = false;
-            stripeEffect.rectTransform.localScale = Vector3.one;
+            ClearTransientFeedback();
             for (int y = 0; y < Board.Height; y++)
                 for (int x = 0; x < Board.Width; x++)
                 {
@@ -516,6 +524,7 @@ namespace CatMatch3.Runtime
         public void HideResult() { resultPanel.SetActive(false); }
         public void ShowResult(GameplayState state, GameplayFailure failure, bool finalLevel)
         {
+            ClearTransientFeedback();
             var content = GetResultContent(state, failure, finalLevel);
             resultTitle.text = content.Title;
             resultMessage.text = content.Message;
@@ -638,39 +647,102 @@ namespace CatMatch3.Runtime
             b.anchoredPosition = toB;
         }
 
-        public IEnumerator AnimateClear(IReadOnlyList<TileRemoval> removals)
+        public void ClearTransientFeedback()
         {
-            float elapsed = 0f;
-            while (elapsed < 0.22f)
+            if (stripeEffect != null)
             {
-                elapsed += Time.unscaledDeltaTime;
-                float fraction = Mathf.Clamp01(elapsed / 0.22f);
-                foreach (var removal in removals)
-                    tiles[removal.Position.X, removal.Position.Y].SetVisibility(1f - fraction, 1f - 0.7f * fraction);
-                yield return null;
+                stripeEffect.enabled = false;
+                stripeEffect.rectTransform.localScale = Vector3.one;
             }
+            if (comboFeedback != null) comboFeedback.enabled = false;
+        }
+
+        private static float DropEase(float fraction)
+        {
+            float remaining = 1f - Mathf.Clamp01(fraction);
+            return 1f - remaining * remaining * remaining;
+        }
+
+        // Alpha and scale share the existing clear slot: quick small pop, then soft disappearance.
+        private static Vector2 ClearPose(float fraction, bool cascade)
+        {
+            float t = Mathf.Clamp01(fraction);
+            float peak = cascade ? 1.08f : 1.05f;
+            if (t < 0.25f) return new Vector2(1f, Mathf.Lerp(1f, peak, Mathf.SmoothStep(0f, 1f, t / 0.25f)));
+            float fade = Mathf.SmoothStep(0f, 1f, (t - 0.25f) / 0.75f);
+            return new Vector2(1f - fade, Mathf.Lerp(peak, 0.82f, fade));
+        }
+
+        private static Rect ActivationBounds(SpecialActivation activation, float side, float cellSize, float reach)
+        {
+            var origin = new Vector2((activation.Position.X + 0.5f) * cellSize - side * 0.5f,
+                (activation.Position.Y + 0.5f) * cellSize - side * 0.5f);
+            bool horizontal = activation.Tile.Stripe == StripeOrientation.Horizontal;
+            float from = Mathf.Lerp(horizontal ? origin.x : origin.y, -side * 0.5f, reach);
+            float to = Mathf.Lerp(horizontal ? origin.x : origin.y, side * 0.5f, reach);
+            float thickness = cellSize * 0.18f;
+            return horizontal ? new Rect(from, origin.y - thickness * 0.5f, to - from, thickness)
+                : new Rect(origin.x - thickness * 0.5f, from, thickness, to - from);
+        }
+
+        public IEnumerator AnimateClear(IReadOnlyList<TileRemoval> removals, bool cascade = false)
+        {
+            bool showCombo = cascade && removals.Count > 0;
+            Vector2 comboOrigin = showCombo ? CellCenter(removals[0].Position) : Vector2.zero;
+            if (showCombo)
+            {
+                Place(comboFeedback.rectTransform, Vector2.one * 0.5f, comboOrigin, new Vector2(step, step * 0.32f));
+                comboFeedback.fontSize = Mathf.Max(1, Mathf.RoundToInt(step * 0.24f));
+                comboFeedback.enabled = true;
+            }
+            float elapsed = 0f;
+            try
+            {
+                while (elapsed < 0.22f)
+                {
+                    elapsed += Time.unscaledDeltaTime;
+                    float fraction = Mathf.Clamp01(elapsed / 0.22f);
+                    var pose = ClearPose(fraction, cascade);
+                    for (int i = 0; i < removals.Count; i++)
+                    {
+                        var cell = removals[i].Position;
+                        tiles[cell.X, cell.Y].SetVisibility(pose.x, pose.y);
+                    }
+                    if (showCombo)
+                    {
+                        var tint = Cream;
+                        tint.a = Mathf.Sin(fraction * Mathf.PI);
+                        comboFeedback.color = tint;
+                        comboFeedback.rectTransform.anchoredPosition = comboOrigin + Vector2.up * (step * (0.12f + 0.12f * fraction));
+                    }
+                    yield return null;
+                }
+            }
+            finally { if (comboFeedback != null) comboFeedback.enabled = false; }
         }
 
         public IEnumerator AnimateActivation(SpecialActivation activation)
         {
             foreach (var cell in activation.Cells) tiles[cell.X, cell.Y].SetEmphasis(false, true);
-            bool horizontal = activation.Tile.Stripe == StripeOrientation.Horizontal;
-            var center = CellCenter(activation.Position);
-            Place(stripeEffect.rectTransform, new Vector2(0.5f, 0.5f),
-                horizontal ? new Vector2(0f, center.y) : new Vector2(center.x, 0f),
-                horizontal ? new Vector2(boardRect.rect.width, step * 0.36f) : new Vector2(step * 0.36f, boardRect.rect.height));
+            var bounds = ActivationBounds(activation, boardRect.rect.width, step, 0f);
+            Place(stripeEffect.rectTransform, Vector2.one * 0.5f, bounds.center, bounds.size);
+            stripeEffect.rectTransform.localScale = Vector3.one;
             stripeEffect.enabled = true;
             float elapsed = 0f;
-            while (elapsed < 0.22f)
+            try
             {
-                elapsed += Time.unscaledDeltaTime;
-                float fraction = Mathf.Clamp01(elapsed / 0.22f);
-                stripeEffect.color = new Color(0.24f, 1f, 0.68f, 0.65f * (1f - fraction));
-                stripeEffect.rectTransform.localScale = horizontal
-                    ? new Vector3(fraction, 1f, 1f) : new Vector3(1f, fraction, 1f);
-                yield return null;
+                while (elapsed < 0.22f)
+                {
+                    elapsed += Time.unscaledDeltaTime;
+                    float fraction = Mathf.Clamp01(elapsed / 0.22f);
+                    bounds = ActivationBounds(activation, boardRect.rect.width, step, DropEase(fraction / 0.7f));
+                    stripeEffect.rectTransform.anchoredPosition = bounds.center;
+                    stripeEffect.rectTransform.sizeDelta = bounds.size;
+                    stripeEffect.color = new Color(0.45f, 0.85f, 0.86f, 0.32f * Mathf.Sin(fraction * Mathf.PI));
+                    yield return null;
+                }
             }
-            stripeEffect.enabled = false;
+            finally { if (stripeEffect != null) stripeEffect.enabled = false; }
         }
 
         public IEnumerator AnimateCreation(IReadOnlyList<SpecialCreation> creations)
@@ -704,10 +776,13 @@ namespace CatMatch3.Runtime
             while (elapsed < 0.30f)
             {
                 elapsed += Time.unscaledDeltaTime;
-                float fraction = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / 0.30f));
-                foreach (var movement in movements)
+                float fraction = DropEase(elapsed / 0.30f);
+                for (int i = 0; i < movements.Count; i++)
+                {
+                    var movement = movements[i];
                     tiles[movement.From.X, movement.From.Y].Rect.anchoredPosition =
                         Vector2.Lerp(CellCenter(movement.From), CellCenter(movement.To), fraction);
+                }
                 yield return null;
             }
         }
@@ -719,10 +794,13 @@ namespace CatMatch3.Runtime
             while (elapsed < 0.38f)
             {
                 elapsed += Time.unscaledDeltaTime;
-                float fraction = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / 0.38f));
-                foreach (var spawn in spawns)
+                float fraction = DropEase(elapsed / 0.38f);
+                for (int i = 0; i < spawns.Count; i++)
+                {
+                    var spawn = spawns[i];
                     tiles[spawn.Position.X, spawn.Position.Y].Rect.anchoredPosition =
                         Vector2.Lerp(CellCenter(spawn.EntryPosition), CellCenter(spawn.Position), fraction);
+                }
                 yield return null;
             }
         }

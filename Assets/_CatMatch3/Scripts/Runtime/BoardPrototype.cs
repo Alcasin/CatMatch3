@@ -68,6 +68,7 @@ namespace CatMatch3.Runtime
         private void CancelPresentation()
         {
             StopAllCoroutines();
+            view.ClearTransientFeedback();
             pointerHeld = false;
             selected = null;
             view.HideResult();
@@ -141,6 +142,7 @@ namespace CatMatch3.Runtime
         private void OnDisable()
         {
             StopAllCoroutines();
+            if (view != null) view.ClearTransientFeedback();
             pointerHeld = false;
         }
 
@@ -279,7 +281,7 @@ namespace CatMatch3.Runtime
                         $"{(activation.IsChained ? "CHAIN" : "STRIPE")}  -  {activation.Tile.Stripe} at {activation.Position}");
                     yield return view.AnimateActivation(activation);
                 }
-                yield return view.AnimateClear(wave.Removals);
+                yield return view.AnimateClear(wave.Removals, i > 0);
                 view.ShowSnapshot(wave.AfterClear);
                 view.ShowObjectives(wave.ObjectivesAfter);
                 yield return view.AnimateCreation(wave.Creations);
@@ -327,6 +329,7 @@ namespace CatMatch3.Runtime
             State = BoardInteractionState.Error;
             pointerHeld = false;
             selected = null;
+            view.ClearTransientFeedback();
             Debug.LogError("CatMatch3: " + message + " Use Restart to recover.", this);
             if (board != null) view.ShowSnapshot(board.Capture());
             view.ShowObjectives(Progress);
