@@ -115,9 +115,9 @@ namespace CatMatch3.Runtime
 
         private void RefreshHud()
         {
-            view.ShowLevel(diagnostic ? "DIAGNOSTIC — " + (session != null ? session.Level.DisplayName : initialScenario.ToString()) :
-                $"Level {currentLevel + 1}: {session.Level.DisplayName}", session?.RemainingMoves,
-                !diagnostic && currentLevel == 0 && !tutorialDismissed);
+            view.ShowLevel(currentLevel + 1,
+                session != null ? session.Level.DisplayName : initialScenario.ToString(), session?.RemainingMoves,
+                !diagnostic && currentLevel == 0 && !tutorialDismissed, diagnostic);
         }
 
         public void ResultAction()

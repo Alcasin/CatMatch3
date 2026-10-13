@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 using CatMatch3.Core;
 using UnityEngine;
 using UnityEngine.UI;
@@ -27,16 +26,71 @@ namespace CatMatch3.Runtime
         private Vector2 lastSize;
         private float step;
         private CanvasGroup boardVisibility;
-        private readonly Image[,] pawMarks = new Image[Board.Width, Board.Height];
-        private Text objectiveStatus;
+        private readonly PawTargetGraphic[,] pawMarks = new PawTargetGraphic[Board.Width, Board.Height];
         private Image stripeEffect;
+        private Text levelNumber;
         private Text levelTitle;
+        private Text movesLabel;
         private Text moves;
         private Text tutorial;
         private GameObject resultPanel;
         private Text resultTitle;
         private Text resultButtonLabel;
         private Rect lastSafeArea;
+        private RectTransform header;
+        private RectTransform movesPanel;
+        private RectTransform goalsRoot;
+        private Text goalsLabel;
+        private RectTransform boardFrame;
+        private RectTransform restartRect;
+        private Text restartLabel;
+        private readonly List<ObjectiveCard> objectiveCards = new List<ObjectiveCard>();
+        private int activeObjectives;
+        private bool diagnosticHud;
+        private string lastStatus = "";
+        private Texture2D panelTexture;
+        private Sprite panelSprite;
+        private static readonly Color Ink = new Color32(0x42, 0x5B, 0x6D, 255);
+        private static readonly Color Cream = new Color32(0xFF, 0xF8, 0xEE, 255);
+        private static readonly Color Blue = new Color32(0xBB, 0xD3, 0xDC, 255);
+
+        private sealed class ObjectiveCard
+        {
+            public RectTransform Root, IconWell;
+            public Image Icon;
+            public Text Symbol, Caption, Count;
+        }
+
+        // Pure geometry shared by relayout and standalone checks; values are in safe-area UI units.
+        private struct HudLayout
+        {
+            public float Scale, Margin, Width, HeaderHeight, CardsTop, CardHeight, GoalsTop,
+                TutorialTop, BoardSide, BoardY, RestartY, StatusY;
+            public int Columns, Rows;
+        }
+
+        private static HudLayout CalculateLayout(float width, float height, int objectiveCount)
+        {
+            float scale = Mathf.Min(width / 900f, height / 1400f);
+            float margin = 27f * scale;
+            int columns = Mathf.Clamp(objectiveCount, 1, 3);
+            int rows = Mathf.Max(1, (objectiveCount + columns - 1) / columns);
+            float goalsTop = (24f + 144f + 18f) * scale;
+            float cardsTop = goalsTop + 32f * scale;
+            float tutorialTop = cardsTop + (rows * 104f + (rows - 1) * 12f + 12f) * scale;
+            float boardTop = tutorialTop + 52f * scale;
+            float footerHeight = 244f * scale;
+            float frameSide = Mathf.Max(1f, Mathf.Min(width - 2f * margin, height - boardTop - footerHeight));
+            return new HudLayout
+            {
+                Scale = scale, Margin = margin, Width = width - 2f * margin, HeaderHeight = 144f * scale,
+                Columns = columns, Rows = rows, GoalsTop = goalsTop, CardsTop = cardsTop,
+                CardHeight = 104f * scale, TutorialTop = tutorialTop,
+                BoardSide = Mathf.Max(1f, frameSide - 16f * scale),
+                BoardY = (footerHeight - boardTop) * 0.5f,
+                RestartY = (24f + 64f) * scale, StatusY = (24f + 128f + 16f + 28f) * scale
+            };
+        }
 
         public float CellSize => step;
 
@@ -67,19 +121,35 @@ namespace CatMatch3.Runtime
             if (boardRect != null) return;
             ValidateCatSprites();
             owner = controller;
+            BuildPanelSprite();
+            var background = CreateRect("Mint background", transform);
+            Stretch(background);
+            var backgroundImage = background.gameObject.AddComponent<Image>();
+            backgroundImage.color = new Color32(0xE7, 0xF1, 0xEC, 255);
+            backgroundImage.raycastTarget = false;
             canvasRect = CreateRect("Safe area", transform);
             ApplySafeArea();
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            levelTitle = CreateText("Level", canvasRect, "", 42);
-            Place(levelTitle.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -65f), new Vector2(820f, 100f));
-            moves = CreateText("Moves", canvasRect, "", 48);
-            Place(moves.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -155f), new Vector2(820f, 70f));
-            objectiveStatus = CreateText("Objectives", canvasRect, "", 40);
-            Place(objectiveStatus.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -245f), new Vector2(820f, 100f));
-            tutorial = CreateText("Tutorial", canvasRect, "", 32);
-            Place(tutorial.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -330f), new Vector2(820f, 60f));
-            status = CreateText("Status", canvasRect, "", 28);
-            Place(status.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 175f), new Vector2(820f, 70f));
+            header = CreatePanel("Level header", canvasRect, Cream, true);
+            levelNumber = CreateHudText("Level number", header, "", 26, true);
+            levelNumber.alignment = TextAnchor.MiddleLeft;
+            levelTitle = CreateHudText("Level title", header, "", 44, true);
+            levelTitle.alignment = TextAnchor.MiddleLeft;
+            movesPanel = CreatePanel("Moves panel", header, Blue);
+            movesLabel = CreateHudText("Moves label", movesPanel, "MOVES", 24, true);
+            moves = CreateHudText("Moves remaining", movesPanel, "", 64, true);
+            goalsLabel = CreateHudText("Goals label", canvasRect, "GOALS", 24, true);
+            goalsLabel.alignment = TextAnchor.MiddleLeft;
+            goalsRoot = CreateRect("Objective cards", canvasRect);
+            tutorial = CreateHudText("Tutorial", canvasRect, "", 26);
+            status = CreateHudText("Diagnostic status", canvasRect, "", 24);
+            status.gameObject.SetActive(false);
+
+            boardFrame = CreatePanel("Board surround", canvasRect, Blue, true);
+            var frameFill = CreatePanel("Cream inset", boardFrame, Cream);
+            Stretch(frameFill);
+            frameFill.offsetMin = Vector2.one * 3f;
+            frameFill.offsetMax = Vector2.one * -3f;
 
             boardRect = CreateRect("Board", canvasRect);
             boardVisibility = boardRect.gameObject.AddComponent<CanvasGroup>();
@@ -89,8 +159,7 @@ namespace CatMatch3.Runtime
             for (int y = 0; y < Board.Height; y++)
                 for (int x = 0; x < Board.Width; x++)
                 {
-                    var marker = CreateRect("Paw cell " + new BoardPosition(x, y), boardRect).gameObject.AddComponent<Image>();
-                    marker.color = new Color(0.10f, 0.88f, 1f);
+                    var marker = CreateRect("Paw cell " + new BoardPosition(x, y), boardRect).gameObject.AddComponent<PawTargetGraphic>();
                     marker.raycastTarget = false;
                     marker.enabled = false;
                     pawMarks[x, y] = marker;
@@ -123,17 +192,21 @@ namespace CatMatch3.Runtime
             stripeEffect.raycastTarget = false;
             stripeEffect.enabled = false;
 
-            var resetRect = CreateRect("Restart current level", canvasRect);
-            Place(resetRect, new Vector2(0.5f, 0f), new Vector2(0f, 72f), new Vector2(420f, 96f));
-            var resetImage = resetRect.gameObject.AddComponent<Image>();
-            resetImage.color = new Color(0.25f, 0.78f, 0.64f);
-            var reset = resetRect.gameObject.AddComponent<Button>();
+            restartRect = CreatePanel("Restart current level", canvasRect, new Color32(0xE8, 0xAD, 0x67, 255));
+            var resetImage = restartRect.GetComponent<Image>();
+            resetImage.raycastTarget = true;
+            var reset = restartRect.gameObject.AddComponent<Button>();
             reset.targetGraphic = resetImage;
             reset.navigation = new Navigation { mode = Navigation.Mode.None };
+            var buttonColors = reset.colors;
+            buttonColors.highlightedColor = new Color(1f, 0.97f, 0.92f);
+            buttonColors.selectedColor = buttonColors.highlightedColor;
+            buttonColors.pressedColor = new Color(0.84f, 0.82f, 0.78f);
+            buttonColors.fadeDuration = 0.1f;
+            reset.colors = buttonColors;
             reset.onClick.AddListener(owner.ResetBoard);
-            var resetLabel = CreateText("Label", resetRect, "RESTART", 38);
-            resetLabel.color = new Color(0.07f, 0.14f, 0.17f);
-            Stretch(resetLabel.rectTransform);
+            restartLabel = CreateHudText("Label", restartRect, "RESTART", 34, true);
+            Stretch(restartLabel.rectTransform);
             BuildResultPanel();
             Canvas.ForceUpdateCanvases();
             Relayout();
@@ -154,7 +227,55 @@ namespace CatMatch3.Runtime
         private void Relayout()
         {
             lastSize = canvasRect.rect.size;
-            float side = Mathf.Max(7f, Mathf.Min(lastSize.x - 64f, lastSize.y - 600f));
+            var layout = CalculateLayout(lastSize.x, lastSize.y, activeObjectives);
+            float s = layout.Scale;
+            PlaceFromTop(header, layout.Margin, 24f * s, layout.Width, layout.HeaderHeight);
+            float movesWidth = 156f * s;
+            float textWidth = layout.Width - movesWidth - 72f * s;
+            Place(levelNumber.rectTransform, new Vector2(0f, 1f), new Vector2(24f * s + textWidth / 2f, -36f * s),
+                new Vector2(textWidth, 32f * s));
+            Place(levelTitle.rectTransform, new Vector2(0f, 1f), new Vector2(24f * s + textWidth / 2f, -89f * s),
+                new Vector2(textWidth, 66f * s));
+            Place(movesPanel, new Vector2(1f, 0.5f), new Vector2(-18f * s - movesWidth / 2f, 0f),
+                new Vector2(movesWidth, 112f * s));
+            Place(movesLabel.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -23f * s), new Vector2(140f * s, 28f * s));
+            Place(moves.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -73f * s), new Vector2(140f * s, 70f * s));
+            PlaceFromTop(goalsLabel.rectTransform, layout.Margin + 4f * s, layout.GoalsTop, layout.Width - 8f * s, 24f * s);
+            PlaceFromTop(goalsRoot, layout.Margin, layout.CardsTop, layout.Width,
+                layout.Rows * layout.CardHeight + (layout.Rows - 1) * 12f * s);
+            float cardWidth = (layout.Width - (layout.Columns - 1) * 12f * s) / Mathf.Max(2, layout.Columns);
+            for (int i = 0; i < activeObjectives; i++)
+            {
+                var card = objectiveCards[i];
+                int row = i / layout.Columns;
+                int rowCount = Mathf.Min(layout.Columns, activeObjectives - row * layout.Columns);
+                float rowWidth = rowCount * cardWidth + (rowCount - 1) * 12f * s;
+                float x = (layout.Width - rowWidth) / 2f + (i % layout.Columns) * (cardWidth + 12f * s);
+                PlaceFromTop(card.Root, x, row * (layout.CardHeight + 12f * s), cardWidth, layout.CardHeight);
+                Place(card.IconWell, new Vector2(0f, 0.5f), new Vector2(52f * s, 0f), Vector2.one * 72f * s);
+                float countWidth = cardWidth - 116f * s;
+                Place(card.Caption.rectTransform, new Vector2(0f, 1f), new Vector2(100f * s + countWidth / 2f, -28f * s),
+                    new Vector2(countWidth, 26f * s));
+                Place(card.Count.rectTransform, new Vector2(0f, 1f), new Vector2(100f * s + countWidth / 2f, -67f * s),
+                    new Vector2(countWidth, 48f * s));
+                FitHudText(card.Caption, 22, s);
+                FitHudText(card.Count, 40, s);
+                FitHudText(card.Symbol, 20, s);
+            }
+            PlaceFromTop(tutorial.rectTransform, layout.Margin, layout.TutorialTop, layout.Width, 32f * s);
+            Place(restartRect, new Vector2(0.5f, 0f), new Vector2(0f, layout.RestartY), new Vector2(320f, 128f) * s);
+            Place(status.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, layout.StatusY), new Vector2(layout.Width, 56f * s));
+            FitHudText(levelNumber, 26, s);
+            FitHudText(levelTitle, 44, s);
+            FitHudText(movesLabel, 24, s);
+            FitHudText(moves, 64, s);
+            FitHudText(goalsLabel, 24, s);
+            FitHudText(tutorial, 26, s);
+            FitHudText(status, 24, s);
+            FitHudText(restartLabel, 34, s);
+            float side = layout.BoardSide;
+            Place(boardRect, new Vector2(0.5f, 0.5f), new Vector2(0f, layout.BoardY), Vector2.one * side);
+            Place(boardFrame, new Vector2(0.5f, 0.5f), new Vector2(0f, layout.BoardY), Vector2.one * (side + 16f * s));
             boardRect.sizeDelta = new Vector2(side, side);
             step = side / Board.Width;
             for (int y = 0; y < Board.Height; y++)
@@ -202,29 +323,147 @@ namespace CatMatch3.Runtime
                 tiles[position.X, position.Y].SetEmphasis(false, true);
         }
 
-        public void SetStatus(string message) { status.text = message; }
+        public void SetStatus(string message)
+        {
+            lastStatus = message;
+            status.text = diagnosticHud ? message : message.StartsWith("ERROR", StringComparison.Ordinal)
+                ? "Unable to continue. Please restart." : "";
+            status.gameObject.SetActive(status.text.Length > 0);
+        }
 
         public void ShowObjectives(ObjectiveSnapshot progress)
         {
             for (int y = 0; y < Board.Height; y++)
                 for (int x = 0; x < Board.Width; x++) pawMarks[x, y].enabled = false;
-            if (progress == null) { objectiveStatus.text = ""; return; }
-            foreach (var cell in progress.RemainingMarks) pawMarks[cell.X, cell.Y].enabled = true;
-            var text = new StringBuilder();
-            bool combinedObjectives = progress.TotalPaws > 0 && progress.Collections.Count > 0;
-            foreach (var collection in progress.Collections)
-                text.Append($"{collection.Type}: {Mathf.Min(collection.Collected, collection.Target)} / {collection.Target}" +
-                    (combinedObjectives ? "   " : "\n"));
-            if (combinedObjectives) text.AppendLine();
-            if (progress.TotalPaws > 0) text.Append($"Paws: {progress.ClearedPaws} / {progress.TotalPaws}  (cyan cells)");
-            objectiveStatus.text = text.ToString().TrimEnd();
+            int count = progress == null ? 0 : progress.Collections.Count + (progress.TotalPaws > 0 ? 1 : 0);
+            while (objectiveCards.Count < count) objectiveCards.Add(BuildObjectiveCard());
+            for (int i = 0; i < objectiveCards.Count; i++) objectiveCards[i].Root.gameObject.SetActive(i < count);
+            if (progress != null)
+            {
+                foreach (var cell in progress.RemainingMarks) pawMarks[cell.X, cell.Y].enabled = true;
+                for (int i = 0; i < progress.Collections.Count; i++)
+                {
+                    var collection = progress.Collections[i];
+                    var card = objectiveCards[i];
+                    card.Icon.sprite = GetCatSprite(collection.Type);
+                    card.Icon.enabled = true;
+                    card.Symbol.gameObject.SetActive(false);
+                    card.Caption.text = collection.Type.ToString().ToUpperInvariant();
+                    card.Count.text = $"{Mathf.Min(collection.Collected, collection.Target)} / {collection.Target}";
+                }
+                if (progress.TotalPaws > 0)
+                {
+                    var card = objectiveCards[count - 1];
+                    card.Icon.enabled = false;
+                    card.Symbol.gameObject.SetActive(true);
+                    card.Caption.text = "PAWS";
+                    card.Count.text = $"{progress.ClearedPaws} / {progress.TotalPaws}";
+                }
+            }
+            // Reveal the fixed target background through the moving tile's otherwise opaque frame.
+            for (int y = 0; y < Board.Height; y++)
+                for (int x = 0; x < Board.Width; x++) tiles[x, y].SetPawTarget(pawMarks[x, y].enabled);
+            if (activeObjectives != count)
+            {
+                activeObjectives = count;
+                Relayout();
+            }
         }
 
-        public void ShowLevel(string title, int? remainingMoves, bool showTutorial)
+        public void ShowLevel(int number, string title, int? remainingMoves, bool showTutorial, bool diagnostic)
         {
+            diagnosticHud = diagnostic;
+            levelNumber.text = diagnostic ? "DIAGNOSTIC" : $"LEVEL {number:00}";
             levelTitle.text = title;
-            moves.text = remainingMoves.HasValue ? "Moves: " + remainingMoves.Value : "DIAGNOSTIC — unlimited moves";
+            moves.text = remainingMoves.HasValue ? remainingMoves.Value.ToString() : "∞";
             tutorial.text = showTutorial ? "Swap adjacent cats to match 3!" : "";
+            SetStatus(lastStatus);
+        }
+
+        private ObjectiveCard BuildObjectiveCard()
+        {
+            var card = new ObjectiveCard { Root = CreatePanel("Objective card", goalsRoot, Cream) };
+            card.IconWell = CreatePanel("Icon background", card.Root, Blue);
+            var iconRect = CreateRect("Cat icon", card.IconWell);
+            Stretch(iconRect);
+            iconRect.offsetMin = Vector2.one * 4f;
+            iconRect.offsetMax = Vector2.one * -4f;
+            card.Icon = iconRect.gameObject.AddComponent<Image>();
+            card.Icon.preserveAspect = true;
+            card.Icon.raycastTarget = false;
+            card.Symbol = CreateHudText("Temporary paw label", card.IconWell, "PAW", 20, true);
+            Stretch(card.Symbol.rectTransform);
+            card.Caption = CreateHudText("Objective name", card.Root, "", 22, true);
+            card.Caption.alignment = TextAnchor.MiddleLeft;
+            card.Count = CreateHudText("Progress", card.Root, "", 40, true);
+            card.Count.alignment = TextAnchor.MiddleLeft;
+            return card;
+        }
+
+        private RectTransform CreatePanel(string name, Transform parent, Color color, bool shadow = false)
+        {
+            var rect = CreateRect(name, parent);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.sprite = panelSprite;
+            image.type = Image.Type.Sliced;
+            image.color = color;
+            image.raycastTarget = false;
+            if (shadow)
+            {
+                var depth = rect.gameObject.AddComponent<Shadow>();
+                depth.effectColor = new Color(0.26f, 0.36f, 0.43f, 0.12f);
+                depth.effectDistance = new Vector2(0f, -4f);
+            }
+            return rect;
+        }
+
+        private Text CreateHudText(string name, Transform parent, string value, int size, bool bold = false)
+        {
+            var text = CreateText(name, parent, value, size);
+            text.color = Ink;
+            text.fontStyle = bold ? FontStyle.Bold : FontStyle.Normal;
+            text.resizeTextForBestFit = true;
+            return text;
+        }
+
+        private static void FitHudText(Text text, int size, float scale)
+        {
+            text.fontSize = Mathf.Max(1, Mathf.RoundToInt(size * scale));
+            text.resizeTextMaxSize = text.fontSize;
+            text.resizeTextMinSize = Mathf.Max(1, Mathf.RoundToInt(size * scale * 0.6f));
+        }
+
+        private static void PlaceFromTop(RectTransform rect, float x, float y, float width, float height)
+        {
+            Place(rect, new Vector2(0f, 1f), new Vector2(x + width / 2f, -y - height / 2f), new Vector2(width, height));
+        }
+
+        private void BuildPanelSprite()
+        {
+            const int size = 64;
+            const float radius = 16f;
+            panelTexture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            { name = "HUD rounded panel", hideFlags = HideFlags.HideAndDontSave, filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = Mathf.Max(Mathf.Abs(x + 0.5f - size / 2f) - (size / 2f - radius), 0f);
+                    float dy = Mathf.Max(Mathf.Abs(y + 0.5f - size / 2f) - (size / 2f - radius), 0f);
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(radius + 0.5f - Mathf.Sqrt(dx * dx + dy * dy)));
+                }
+            panelTexture.SetPixels(pixels);
+            panelTexture.Apply(false, true);
+            panelSprite = Sprite.Create(panelTexture, new Rect(0f, 0f, size, size), Vector2.one * 0.5f,
+                100f, 0, SpriteMeshType.FullRect, Vector4.one * radius);
+            panelSprite.name = "HUD rounded panel";
+            panelSprite.hideFlags = HideFlags.HideAndDontSave;
+        }
+
+        private void OnDestroy()
+        {
+            if (panelSprite != null) Destroy(panelSprite);
+            if (panelTexture != null) Destroy(panelTexture);
         }
 
         public void HideResult() { resultPanel.SetActive(false); }
@@ -348,7 +587,8 @@ namespace CatMatch3.Runtime
                 foreach (var creation in creations)
                 {
                     var tile = tiles[creation.Position.X, creation.Position.Y];
-                    tile.SetEmphasis(true, false);
+                    // Creation keeps its scale pulse without showing a player selection outline.
+                    tile.SetEmphasis(false, false);
                     tile.SetVisibility(1f, scale);
                 }
                 yield return null;

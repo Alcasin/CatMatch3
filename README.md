@@ -1,4 +1,94 @@
-# CatMatch3 — M4 deterministic puzzle revision
+# CatMatch3 — M5-B1 gameplay layout and HUD
+
+## M5-B3 selection feedback
+
+Selected tiles now use a transparent rounded outline in deep crimson (#8B1E2D),
+about 2.5 reference pixels thick and scaled with the cell (capped at 3). It uses
+the existing cell gutter outside the striped edge accents and corner paw motif,
+with no golden selection fill over cats or paw
+targets. The non-interactive frame follows the tile's existing visibility/scale
+and resets through the existing selection/snapshot lifecycle. Special creation
+retains its scale pulse without borrowing the selection highlight. No Editor
+setup, new artwork or serialized references are required.
+
+Validation: player and Editor compilation against Unity 6000.3.8f1 assemblies and
+all 101 standalone NUnit tests passed. Managed geometry checks passed for the
+selection color, transparent interior, thickness, paw/stripe clearance and rebuild
+cleanup at four cell sizes, plus the existing paw mesh and 60 layout checks.
+Unity Test Runner and visual Play Mode verification were not run.
+
+Manual QA: select/deselect normal, honey paw and both striped variants; check
+tap-to-swap and swipes, invalid rollback, valid swaps/cascades, special creation,
+Restart/Retry/Next Level/Play Again, diagnostic fixtures and all 101 Unity EditMode
+tests. Confirm no stale outline, hidden paw motif or overlapping stripe band.
+
+## Paw target visibility refinement
+
+No Editor setup or asset assignments are required. Remaining paw targets now use
+a honey-colored rounded cell, a darker warm border and a small five-pad paw motif
+in the lower-right corner. The graphic stays behind cats on the fixed board cell;
+marked tiles reveal it through their background while retaining a translucent
+match tint and the separate crimson selection outline. Existing objective snapshots
+remove completed targets and
+restore the ordinary tile background. Cat sprites, stripe bands and hitboxes are
+unchanged. The motif uses UI geometry, with no new texture or sprite references.
+
+Validation: player/Editor compilation and all 101 standalone NUnit tests passed.
+Managed checks also passed for paw mesh bounds/palette/rebuild cleanup at four
+cell sizes and 60 existing layout cases, including all 49 cell-center coordinates.
+Unity Test Runner and in-Editor visual QA still need verification. In Level 2,
+check all eight starting targets remain readable under cats, progress during
+ordinary matches and striped activations, and removal of completed targets.
+Replay the known four-move winning route; confirm Level 1 remains unchanged,
+Restart/Retry/Next Level/Play Again work, and all 101 Unity EditMode tests pass.
+
+## M5-B1 gameplay layout and HUD polish
+
+No additional Editor setup is required for the accepted M5-A scene. Let Unity
+compile and enter Play Mode. BoardView builds the HUD with the existing saved cat
+sprite references. Rounded UI panels are generated once in memory, reused through
+9-sliced Images, and released when the view is destroyed; no artwork/import changes
+or new asset assignments are required.
+
+The screen uses a mint background (#E7F1EC), cream panels (#FFF8EE), pastel blue
+accents (#BBD3DC), a warm Restart button (#E8AD67), and slate text (#425B6D).
+The compact header separates LEVEL 01/02 and the authored title from a prominent
+MOVES panel. Collection cards reuse the corresponding cat sprites on contrasting
+icon backgrounds; the paw card uses a temporary PAW text badge. Requirements and
+counts come from ObjectiveSnapshot, including wave-by-wave progress and mixed QA
+objectives. Cards are pooled across Retry and level transitions.
+
+Layout uses the device safe-area rectangle, scales HUD dimensions from its width
+and available height, and reserves separate header/objective/footer regions before
+sizing the square board. At the 900x1600 reference, the board is 830 units wide
+(92.2% of safe width), with an 846-unit rounded surround. Height constrains the board
+on shorter screens; taller screens retain width-based sizing and balanced spacing.
+Goal cards wrap into rows for larger diagnostic configurations. All 49 cells still
+use the same board rectangle and cell step for drawing, movement and hit testing.
+The accepted resize behavior still cancels presentation and restarts the puzzle.
+
+Normal gameplay hides technical READY/wave/cascade messages. Existing QA context
+menus enable a diagnostic HUD with the complete status stream and unlimited-moves
+indicator where applicable. Production errors show a short Restart prompt while
+the existing Console retains details. The result panel, board cells, paw marks,
+stripe bands, input gating and animation sequence remain as accepted.
+
+Validation for this change: Core/Runtime player and Editor configurations plus
+the Editor assembly compiled against installed Unity 6000.3.8f1 assemblies;
+101/101 standalone NUnit tests passed. The actual shared layout calculation passed
+60 geometry cases covering 9:16, tall portrait, small-device equivalents, shorter
+portrait, safe-area insets and 0/1/2/3/6 objective cards. These check safe boundaries,
+HUD separation, text-container widths and all cell-center hit coordinates; they
+do not substitute for Unity text rendering or device visual QA.
+
+Manual QA: inspect 9:16, 19.5:9/20:9 and a small portrait Game view with safe-area
+insets. Check header/title and large move count, Orange/Gray icons and counts, paw
+progress, unclipped text, board margins and Restart touch feedback. Replay both
+winning routes; watch cascade/special progress, then Retry/Restart/Next Level/Play
+Again. Exercise M2/M3/M4 diagnostics (technical status visible there, hidden after
+returning to production), Restart during animation and tap/swipe hit alignment.
+Confirm the existing result panels and all 101 Unity EditMode tests. Unity visual
+QA and Unity Test Runner were not executed by this implementation session.
 
 ## M5-A cat sprite integration
 
@@ -13,7 +103,7 @@ edits before applying it. No per-tile assignment or M4 level migration is needed
 All tile snapshots and refill/diagnostic visuals use the same explicit
 Orange/Black/White/Gray/Siamese mapping. UI Images preserve aspect ratio, use
 white tint and the complete sprite rectangle, and leave a 6% margin on each side.
-Square cell roots/hitboxes, selection/match highlighting, cyan paw frames and
+Square cell roots/hitboxes, selection/match highlighting, fixed paw targets and
 horizontal/vertical stripe indicators remain. Special cats use thin bright edge
 bands: left/right for horizontal (row clear), top/bottom for vertical (column clear),
 outside the cat artwork.

@@ -17,6 +17,10 @@ namespace CatMatch3.Runtime
         private CanvasGroup visibility;
         private Image firstStripeBand;
         private Image secondStripeBand;
+        private TileSelectionGraphic selectionOutline;
+        private bool pawTarget;
+        private bool selected;
+        private bool matched;
 
         public RectTransform Rect => (RectTransform)transform;
 
@@ -30,6 +34,16 @@ namespace CatMatch3.Runtime
             visibility = gameObject.AddComponent<CanvasGroup>();
             firstStripeBand = CreateStripeBand("Stripe edge 1");
             secondStripeBand = CreateStripeBand("Stripe edge 2");
+            var selectionObject = new GameObject("Selection outline", typeof(RectTransform), typeof(TileSelectionGraphic));
+            selectionObject.transform.SetParent(transform, false);
+            // Above the cell background, below the cat and stripe bands so artwork stays clear.
+            selectionObject.transform.SetAsFirstSibling();
+            selectionOutline = selectionObject.GetComponent<TileSelectionGraphic>();
+            selectionOutline.rectTransform.anchorMin = Vector2.zero;
+            selectionOutline.rectTransform.anchorMax = Vector2.one;
+            selectionOutline.rectTransform.offsetMin = selectionOutline.rectTransform.offsetMax = Vector2.zero;
+            selectionOutline.raycastTarget = false;
+            selectionOutline.enabled = false;
         }
 
         private Image CreateStripeBand(string name)
@@ -88,8 +102,30 @@ namespace CatMatch3.Runtime
 
         public void SetEmphasis(bool selected, bool matched)
         {
+            this.selected = selected;
+            this.matched = matched;
+            UpdateBorder();
+        }
+
+        public void SetPawTarget(bool marked)
+        {
+            if (pawTarget == marked) return;
+            pawTarget = marked;
+            UpdateBorder();
+        }
+
+        private void UpdateBorder()
+        {
+            selectionOutline.enabled = selected && !matched;
             border.color = matched ? new Color(0.24f, 1f, 0.68f) :
-                selected ? new Color(1f, 0.85f, 0.20f) : new Color(0.25f, 0.30f, 0.39f);
+                new Color(0.25f, 0.30f, 0.39f);
+            if (pawTarget)
+            {
+                var tint = border.color;
+                tint.a = matched ? 0.25f : 0f;
+                border.color = tint;
+            }
+            // Image alpha does not alter the existing rectangular hitbox (alpha test stays zero).
         }
 
         public void OnPointerDown(PointerEventData data)
