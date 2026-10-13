@@ -35,7 +35,14 @@ namespace CatMatch3.Runtime
         private Text tutorial;
         private GameObject resultPanel;
         private Text resultTitle;
+        private Text resultMessage;
         private Text resultButtonLabel;
+        private RectTransform resultSafeArea;
+        private RectTransform resultCard;
+        private RectTransform resultBadge;
+        private RectTransform resultAction;
+        private Image resultCat;
+        private Button resultButton;
         private Rect lastSafeArea;
         private RectTransform header;
         private RectTransform movesPanel;
@@ -67,6 +74,45 @@ namespace CatMatch3.Runtime
             public float Scale, Margin, Width, HeaderHeight, CardsTop, CardHeight, GoalsTop,
                 TutorialTop, BoardSide, BoardY, RestartY, StatusY;
             public int Columns, Rows;
+        }
+
+        private struct ResultContent
+        {
+            public string Title, Message, Action;
+            public bool Success;
+        }
+
+        private static ResultContent GetResultContent(GameplayState state, GameplayFailure failure, bool finalLevel)
+        {
+            bool win = state == GameplayState.Win;
+            return new ResultContent
+            {
+                Success = win,
+                Title = win ? (finalLevel ? "Game Complete!" : "Level Complete!") : "Try Again!",
+                Message = win ? "Purrfect!" : failure == GameplayFailure.NoLegalMoves
+                    ? "No more matches available" : "Out of Moves",
+                Action = win ? (finalLevel ? "PLAY AGAIN" : "NEXT LEVEL") : "RETRY"
+            };
+        }
+
+        private struct ResultLayout
+        {
+            public float Scale;
+            public Rect Panel, Badge, Title, Message, Action;
+        }
+
+        private static ResultLayout CalculateResultLayout(float width, float height)
+        {
+            float s = Mathf.Min(width / 900f, height / 1200f);
+            return new ResultLayout
+            {
+                Scale = s,
+                Panel = new Rect(-360f * s, -320f * s, 720f * s, 640f * s),
+                Badge = new Rect(-60f * s, 146f * s, 120f * s, 120f * s),
+                Title = new Rect(-312f * s, 18f * s, 624f * s, 104f * s),
+                Message = new Rect(-312f * s, -72f * s, 624f * s, 80f * s),
+                Action = new Rect(-312f * s, -260f * s, 624f * s, 128f * s)
+            };
         }
 
         private static HudLayout CalculateLayout(float width, float height, int objectiveCount)
@@ -286,6 +332,7 @@ namespace CatMatch3.Runtime
                     Place(tiles[x, y].Rect, new Vector2(0.5f, 0.5f),
                         CellCenter(new BoardPosition(x, y)), Vector2.one * (step - 6f));
                 }
+            RelayoutResult();
         }
 
         public void ShowBoard(Board board)
@@ -467,10 +514,17 @@ namespace CatMatch3.Runtime
         }
 
         public void HideResult() { resultPanel.SetActive(false); }
-        public void ShowResult(string title, string action)
+        public void ShowResult(GameplayState state, GameplayFailure failure, bool finalLevel)
         {
-            resultTitle.text = title;
-            resultButtonLabel.text = action;
+            var content = GetResultContent(state, failure, finalLevel);
+            resultTitle.text = content.Title;
+            resultMessage.text = content.Message;
+            resultButtonLabel.text = content.Action;
+            resultBadge.GetComponent<Image>().color = content.Success ? (Color)new Color32(0xF7, 0xE1, 0xC3, 255) : Blue;
+            resultCat.sprite = GetCatSprite(content.Success ? CatType.Orange : CatType.Gray);
+            resultButton.interactable = true;
+            resultPanel.transform.SetAsLastSibling();
+            RelayoutResult();
             resultPanel.SetActive(true);
         }
 
@@ -484,24 +538,67 @@ namespace CatMatch3.Runtime
 
         private void BuildResultPanel()
         {
-            var overlay = CreateRect("Result panel", canvasRect);
+            // Full-canvas scrim blocks background raycasts, including outside the safe area.
+            var overlay = CreateRect("Result overlay", transform);
             Stretch(overlay);
             resultPanel = overlay.gameObject;
-            overlay.gameObject.AddComponent<Image>().color = new Color(0.05f, 0.08f, 0.12f, 0.96f);
-            resultTitle = CreateText("Result", overlay, "", 56);
-            Place(resultTitle.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 140f), new Vector2(800f, 180f));
-            var buttonRect = CreateRect("Result action", overlay);
-            Place(buttonRect, new Vector2(0.5f, 0.5f), new Vector2(0f, -40f), new Vector2(560f, 120f));
-            var image = buttonRect.gameObject.AddComponent<Image>();
-            image.color = new Color(0.25f, 0.78f, 0.64f);
-            var button = buttonRect.gameObject.AddComponent<Button>();
-            button.targetGraphic = image;
-            button.navigation = new Navigation { mode = Navigation.Mode.None };
-            button.onClick.AddListener(owner.ResultAction);
-            resultButtonLabel = CreateText("Action label", buttonRect, "", 42);
-            resultButtonLabel.color = new Color(0.07f, 0.14f, 0.17f);
+            var scrim = overlay.gameObject.AddComponent<Image>();
+            scrim.color = new Color(0.16f, 0.23f, 0.28f, 0.42f);
+            scrim.raycastTarget = true;
+            resultSafeArea = CreateRect("Result safe area", overlay);
+            resultCard = CreatePanel("Cream result card", resultSafeArea, Cream, true);
+            resultBadge = CreatePanel("Cat portrait background", resultCard, Blue);
+            var catRect = CreateRect("Cat portrait", resultBadge);
+            Stretch(catRect);
+            catRect.offsetMin = Vector2.one * 8f;
+            catRect.offsetMax = Vector2.one * -8f;
+            resultCat = catRect.gameObject.AddComponent<Image>();
+            resultCat.preserveAspect = true;
+            resultCat.raycastTarget = false;
+            resultTitle = CreateHudText("Result title", resultCard, "", 56, true);
+            resultMessage = CreateHudText("Result message", resultCard, "", 32);
+            resultMessage.color = new Color32(0x71, 0x86, 0x96, 255);
+            resultAction = CreatePanel("Result action", resultCard, new Color32(0xE8, 0xAD, 0x67, 255));
+            var image = resultAction.GetComponent<Image>();
+            image.raycastTarget = true;
+            resultButton = resultAction.gameObject.AddComponent<Button>();
+            resultButton.targetGraphic = image;
+            resultButton.navigation = new Navigation { mode = Navigation.Mode.None };
+            resultButton.colors = restartRect.GetComponent<Button>().colors;
+            resultButton.onClick.AddListener(HandleResultAction);
+            resultButtonLabel = CreateHudText("Action label", resultAction, "", 36, true);
             Stretch(resultButtonLabel.rectTransform);
             resultPanel.SetActive(false);
+        }
+
+        private void HandleResultAction()
+        {
+            if (!resultPanel.activeSelf || !resultButton.interactable) return;
+            resultButton.interactable = false;
+            owner.ResultAction();
+        }
+
+        private void RelayoutResult()
+        {
+            resultSafeArea.anchorMin = canvasRect.anchorMin;
+            resultSafeArea.anchorMax = canvasRect.anchorMax;
+            resultSafeArea.offsetMin = resultSafeArea.offsetMax = Vector2.zero;
+            var layout = CalculateResultLayout(canvasRect.rect.width, canvasRect.rect.height);
+            PlaceResultPart(resultCard, layout.Panel);
+            PlaceResultPart(resultBadge, layout.Badge);
+            PlaceResultPart(resultTitle.rectTransform, layout.Title);
+            PlaceResultPart(resultMessage.rectTransform, layout.Message);
+            PlaceResultPart(resultAction, layout.Action);
+            resultCat.rectTransform.offsetMin = Vector2.one * (8f * layout.Scale);
+            resultCat.rectTransform.offsetMax = Vector2.one * (-8f * layout.Scale);
+            FitHudText(resultTitle, 56, layout.Scale);
+            FitHudText(resultMessage, 32, layout.Scale);
+            FitHudText(resultButtonLabel, 36, layout.Scale);
+        }
+
+        private static void PlaceResultPart(RectTransform rect, Rect bounds)
+        {
+            Place(rect, Vector2.one * 0.5f, bounds.center, bounds.size);
         }
 
         public bool TryLocalPoint(Vector2 screenPoint, out Vector2 local)

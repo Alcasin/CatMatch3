@@ -1,4 +1,46 @@
-# CatMatch3 — M5-B1 gameplay layout and HUD
+# CatMatch3 — Gameplay presentation
+
+## M5-C result panels
+
+No Editor setup or scene assignments are required. A single reusable rounded cream
+card sits in the device safe area over a full-screen slate scrim (42% opacity), so
+the finished board remains visible. It reuses the existing rounded UI sprite,
+LegacyRuntime font and cat artwork: Orange on a warm portrait well for success,
+Gray on a soft blue-gray well for retry. Ink titles, muted secondary text and a
+rounded amber primary button match the gameplay HUD. No entrance animation or
+new artwork/texture is added.
+
+| Result | Title | Message | Primary action |
+| --- | --- | --- | --- |
+| Level 1 Win | Level Complete! | Purrfect! | NEXT LEVEL |
+| Level 2 Win | Game Complete! | Purrfect! | PLAY AGAIN |
+| OutOfMoves | Try Again! | Out of Moves | RETRY |
+| NoLegalMoves | Try Again! | No more matches available | RETRY |
+
+Core still decides the terminal state. BoardPrototype presents it after the final
+wave, refill and objective update, then delegates actions to its existing campaign
+flow. The scrim blocks background pointer events; the existing Terminal state
+rejects swaps. One button listener disables itself before invoking the action,
+and ShowResult resets its availability for the next result. Retry, deterministic
+boards, final-move win priority and diagnostic fixtures remain unchanged.
+
+The reference card is 720x640 UI units with a 624x128 action target. It scales from
+safe-area width/height and centers within those bounds. No gameplay HUD or board
+layout was changed. Compilation passed for player/Editor configurations against
+Unity 6000.3.8f1, and all 101 standalone NUnit tests passed. Additional managed
+checks verified six mappings from real terminal sessions (both failures at both
+levels and both final-move wins), plus 30 portrait/safe-area layout cases. These
+checks cover containment, spacing and button dimensions, not Unity rendering.
+
+Manual Unity QA: complete both known puzzle routes and check NEXT LEVEL / PLAY
+AGAIN; use M4 QA Win/Fail/Final move cascade Win and M4 Puzzle QA No Legal Moves.
+Confirm failure explanations, completed objective counts, dimmed board visibility,
+blocked background taps/swipes/Restart, and repeated action taps causing only one
+transition. Check Retry restores the current level, Play Again starts Level 1,
+Restart still works during gameplay, and M2/M3/M4 diagnostics still work. Inspect
+9:16, tall Android and small portrait Game views with safe-area insets for readable
+titles/messages, unclipped panels and comfortable buttons. Run all 101 Unity
+EditMode tests. Unity Test Runner and visual Play Mode QA were not run here.
 
 ## M5-B3 selection feedback
 

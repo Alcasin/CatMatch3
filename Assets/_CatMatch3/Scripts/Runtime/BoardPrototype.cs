@@ -309,10 +309,8 @@ namespace CatMatch3.Runtime
                 State = BoardInteractionState.Terminal;
                 bool win = session.State == GameplayState.Win;
                 bool noMoves = session.Failure == GameplayFailure.NoLegalMoves;
-                string failure = noMoves ? "No more matches available.\nTry again!" : "Out of Moves";
                 view.SetStatus(win ? "Objectives complete!" : noMoves ? "No legal swaps remaining" : "No moves remaining");
-                view.ShowResult(win ? (currentLevel == 0 ? "Level Complete!" : "Game Complete!") : failure,
-                    win ? (currentLevel == 0 ? "NEXT LEVEL" : "PLAY AGAIN") : "RETRY");
+                view.ShowResult(session.State, session.Failure, currentLevel != 0);
                 yield break;
             }
             State = BoardInteractionState.Ready;
