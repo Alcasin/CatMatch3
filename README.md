@@ -1,5 +1,65 @@
 # CatMatch3 — Gameplay presentation
 
+## M5-D2 sound feedback
+
+After Unity imports/compiles, run **CatMatch3 > Setup > Apply M5-D2 Audio** once
+in Edit Mode. Save or revert pending Gameplay edits first. The command imports the
+seven generated mono WAVs as preloaded PCM, adds/reuses one BoardAudio on the
+existing BoardView object, binds every clip and the view reference, and saves
+Gameplay. It preserves custom bindings, restores the active scene and closes only
+the scene it opened. Reruns do not duplicate components or change levels/settings.
+The Editor command has not been executed by this implementation session.
+
+BoardAudio creates two reusable 2D AudioSources once in Play Mode and uses the
+existing camera AudioListener. Short cues use PlayOneShot; a separate result source
+lets a terminal jingle replace active effect tails. No runtime AssetDatabase,
+Resources lookup, per-tile sources, delayed audio callbacks or audio coroutines
+are used. Until setup binds the references, gameplay stays silent and the footer
+SFX control is disabled.
+
+| Cue | Character / length | Presentation event |
+| --- | --- | --- |
+| SFX_Select | Soft high tick, 0.055 s | Selected cell changes; repeated refresh/deselection is silent |
+| SFX_Invalid | Low rounded boop, 0.160 s | Invalid swap begins returning |
+| SFX_Match | Short pitched/noisy pop, 0.120 s | Clear animation starts, once per nonempty wave |
+| SFX_Striped | Filtered airy sweep, 0.220 s | Each real SpecialActivation sweep starts |
+| SFX_Combo | Rising two-tone chime, 0.260 s | Clear starts on a later wave, alongside the pop |
+| SFX_Win | C/E/G three-note jingle, 0.620 s | Win panel appears, once per terminal result |
+| SFX_Fail | Gentle descending two-note cue, 0.440 s | Fail panel appears, once per terminal result |
+
+All WAVs live in `Assets/_CatMatch3/Art/Audio/SFX/`: original procedural mono
+PCM16/22050 Hz, 82,996 bytes total. Soft envelopes, filtered noise and shaped tones
+have zero-valued endpoints, negligible DC and peaks limited to 55% of full scale. No third-party
+samples or downloads are used. `python Tools/generate_sfx.py` deterministically
+regenerates them; `--check` verifies their exact bytes and waveform bounds without
+writing. The script leaves Unity GUIDs/metadata untouched.
+
+The master source volume defaults to 0.6 with per-cue gains of 0.22-0.48. The
+rounded **SFX ON/OFF** control fits to the right of Restart in the existing footer;
+HUD/board sizing and Restart placement are unchanged. Its PlayerPrefs key is
+`CatMatch3.AudioEnabled`, enabled by default, saved immediately on toggle. Muting
+stops active sounds; unmuting never replays an old event. Selection/stripe rate
+limits bound stacking, and terminal events latch until cancellation/reset even
+while muted. Restart/Retry/level changes, errors, disable and app pause stop active
+playback. No sound delays or alters gameplay transitions or animation timing.
+
+Validation: Player/Runtime and Editor compilation against installed Unity
+6000.3.8f1 assemblies passed, as did all 101 standalone NUnit tests. Run
+`powershell -File Tools/validate_audio.ps1` for repeatable WAV, clip/gain mapping,
+cooldown, terminal/error mapping, 200 result/reset duplicate checks and seven footer
+layout checks. Unity import/setup, actual playback, PlayerPrefs persistence and
+Unity Test Runner still require in-Editor verification.
+
+Manual QA: apply setup twice and reopen Gameplay to confirm persistent references
+and one BoardAudio. Check selection/deselection, invalid rollback, clears, both
+stripe directions/chains and later-wave chimes. Verify exactly one win/fail cue,
+including final-move cascade Win, OutOfMoves and NoLegalMoves. Restart during
+effects, Retry, Next Level, Play Again and diagnostic changes must stop old sounds
+without accumulating sources. Toggle SFX during resolution and confirm silence;
+exit/reenter Play Mode (and relaunch a build) to verify the preference. Audition at
+ordinary phone volume, check the footer on small/tall portrait safe areas, and run
+all 101 Unity EditMode tests. No haptics are included.
+
 ## M5-D1 gameplay feedback
 
 No Editor setup is needed. The existing ordered snapshot/coroutine presentation

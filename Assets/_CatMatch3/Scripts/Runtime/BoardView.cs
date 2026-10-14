@@ -16,6 +16,7 @@ namespace CatMatch3.Runtime
         [SerializeField] private Sprite whiteCatSprite;
         [SerializeField] private Sprite grayCatSprite;
         [SerializeField] private Sprite siameseCatSprite;
+        [SerializeField] private BoardAudio audioFeedback;
 
         private readonly BoardTileView[,] tiles = new BoardTileView[Board.Width, Board.Height];
         private BoardPrototype owner;
@@ -52,6 +53,9 @@ namespace CatMatch3.Runtime
         private RectTransform boardFrame;
         private RectTransform restartRect;
         private Text restartLabel;
+        private RectTransform soundRect;
+        private Text soundLabel;
+        private BoardPosition? audibleSelection;
         private readonly List<ObjectiveCard> objectiveCards = new List<ObjectiveCard>();
         private int activeObjectives;
         private bool diagnosticHud;
@@ -139,6 +143,9 @@ namespace CatMatch3.Runtime
             };
         }
 
+        private static Rect CalculateSoundBounds(float scale, float restartY)
+        { return new Rect(184f * scale, restartY - 64f * scale, 176f * scale, 128f * scale); }
+
         public float CellSize => step;
 
         public Sprite GetCatSprite(CatType type)
@@ -168,6 +175,7 @@ namespace CatMatch3.Runtime
             if (boardRect != null) return;
             ValidateCatSprites();
             owner = controller;
+            if (audioFeedback != null) audioFeedback.Initialize();
             BuildPanelSprite();
             var background = CreateRect("Mint background", transform);
             Stretch(background);
@@ -262,6 +270,18 @@ namespace CatMatch3.Runtime
             reset.onClick.AddListener(owner.ResetBoard);
             restartLabel = CreateHudText("Label", restartRect, "RESTART", 34, true);
             Stretch(restartLabel.rectTransform);
+            soundRect = CreatePanel("Sound toggle", canvasRect, Blue);
+            var soundImage = soundRect.GetComponent<Image>();
+            soundImage.raycastTarget = true;
+            var soundButton = soundRect.gameObject.AddComponent<Button>();
+            soundButton.targetGraphic = soundImage;
+            soundButton.navigation = new Navigation { mode = Navigation.Mode.None };
+            soundButton.colors = reset.colors;
+            soundButton.interactable = audioFeedback != null;
+            soundButton.onClick.AddListener(ToggleAudio);
+            soundLabel = CreateHudText("Sound label", soundRect, "", 24, true);
+            Stretch(soundLabel.rectTransform);
+            RefreshSoundLabel();
             BuildResultPanel();
             Canvas.ForceUpdateCanvases();
             Relayout();
@@ -319,6 +339,8 @@ namespace CatMatch3.Runtime
             }
             PlaceFromTop(tutorial.rectTransform, layout.Margin, layout.TutorialTop, layout.Width, 32f * s);
             Place(restartRect, new Vector2(0.5f, 0f), new Vector2(0f, layout.RestartY), new Vector2(320f, 128f) * s);
+            var soundBounds = CalculateSoundBounds(s, layout.RestartY);
+            Place(soundRect, new Vector2(0.5f, 0f), soundBounds.center, soundBounds.size);
             Place(status.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, layout.StatusY), new Vector2(layout.Width, 56f * s));
             FitHudText(levelNumber, 26, s);
             FitHudText(levelTitle, 44, s);
@@ -328,6 +350,7 @@ namespace CatMatch3.Runtime
             FitHudText(tutorial, 26, s);
             FitHudText(status, 24, s);
             FitHudText(restartLabel, 34, s);
+            FitHudText(soundLabel, 24, s);
             float side = layout.BoardSide;
             Place(boardRect, new Vector2(0.5f, 0.5f), new Vector2(0f, layout.BoardY), Vector2.one * side);
             Place(boardFrame, new Vector2(0.5f, 0.5f), new Vector2(0f, layout.BoardY), Vector2.one * (side + 16f * s));
@@ -367,6 +390,8 @@ namespace CatMatch3.Runtime
 
         public void SetSelection(BoardPosition? selected)
         {
+            if (selected.HasValue && selected != audibleSelection) PlaySound(AudioCue.Select);
+            audibleSelection = selected;
             for (int y = 0; y < Board.Height; y++)
                 for (int x = 0; x < Board.Width; x++)
                     tiles[x, y].SetEmphasis(selected.HasValue && selected.Value == new BoardPosition(x, y), false);
@@ -535,7 +560,22 @@ namespace CatMatch3.Runtime
             resultPanel.transform.SetAsLastSibling();
             RelayoutResult();
             resultPanel.SetActive(true);
+            var cue = BoardAudio.ResultCue(state);
+            if (cue.HasValue) PlaySound(cue.Value);
         }
+
+        private void PlaySound(AudioCue cue) { if (audioFeedback != null) audioFeedback.Play(cue); }
+        public void CancelAudio() { if (audioFeedback != null) audioFeedback.Cancel(); }
+
+        private void ToggleAudio()
+        {
+            if (audioFeedback == null) return;
+            audioFeedback.ToggleEnabled();
+            RefreshSoundLabel();
+        }
+
+        private void RefreshSoundLabel()
+        { soundLabel.text = audioFeedback != null && audioFeedback.AudioEnabled ? "SFX ON" : "SFX OFF"; }
 
         private void ApplySafeArea()
         {
@@ -627,6 +667,7 @@ namespace CatMatch3.Runtime
 
         public IEnumerator AnimateExchange(BoardPosition first, BoardPosition second, bool returning)
         {
+            if (returning) PlaySound(AudioCue.Invalid);
             var a = tiles[first.X, first.Y].Rect;
             var b = tiles[second.X, second.Y].Rect;
             var fromA = a.anchoredPosition;
@@ -687,6 +728,11 @@ namespace CatMatch3.Runtime
 
         public IEnumerator AnimateClear(IReadOnlyList<TileRemoval> removals, bool cascade = false)
         {
+            if (removals.Count > 0)
+            {
+                PlaySound(AudioCue.Match);
+                if (cascade) PlaySound(AudioCue.Combo);
+            }
             bool showCombo = cascade && removals.Count > 0;
             Vector2 comboOrigin = showCombo ? CellCenter(removals[0].Position) : Vector2.zero;
             if (showCombo)
@@ -723,6 +769,7 @@ namespace CatMatch3.Runtime
 
         public IEnumerator AnimateActivation(SpecialActivation activation)
         {
+            PlaySound(AudioCue.Striped);
             foreach (var cell in activation.Cells) tiles[cell.X, cell.Y].SetEmphasis(false, true);
             var bounds = ActivationBounds(activation, boardRect.rect.width, step, 0f);
             Place(stripeEffect.rectTransform, Vector2.one * 0.5f, bounds.center, bounds.size);

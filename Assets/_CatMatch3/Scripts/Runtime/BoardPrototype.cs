@@ -69,6 +69,7 @@ namespace CatMatch3.Runtime
         {
             StopAllCoroutines();
             view.ClearTransientFeedback();
+            view.CancelAudio();
             pointerHeld = false;
             selected = null;
             view.HideResult();
@@ -143,6 +144,7 @@ namespace CatMatch3.Runtime
         {
             StopAllCoroutines();
             if (view != null) view.ClearTransientFeedback();
+            if (view != null) view.CancelAudio();
             pointerHeld = false;
         }
 
@@ -330,6 +332,7 @@ namespace CatMatch3.Runtime
             pointerHeld = false;
             selected = null;
             view.ClearTransientFeedback();
+            view.CancelAudio();
             Debug.LogError("CatMatch3: " + message + " Use Restart to recover.", this);
             if (board != null) view.ShowSnapshot(board.Capture());
             view.ShowObjectives(Progress);
